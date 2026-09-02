@@ -1,6 +1,34 @@
 name: Nopo
 description: nopo CLI
 
+plugins:
+  - name: docker
+    path: ./nopo/plugins/docker/src/index.ts
+  - name: docker-compose
+    path: ./nopo/plugins/docker-compose/src/index.ts
+  - name: terraform
+    path: ./nopo/plugins/terraform/src/index.ts
+  - name: playwright
+    path: ./nopo/plugins/playwright/src/index.ts
+  - name: sonar
+    path: ./nopo/plugins/sonar/src/index.ts
+  - name: diff
+    path: ./nopo/plugins/diff/src/index.ts
+  - name: docs
+    path: ./nopo/plugins/docs/src/index.ts
+    config:
+      title: "Nopo Docs"
+      url: "https://more-nopo.github.io"
+      githubUrl: "https://github.com/more-nopo/nopo"
+      baseUrl: "/nopo/"
+      include:
+        - ./nopo/docs
+      sidebar:
+        order:
+          - cli
+        labels:
+          cli: "CLI"
+
 services:
   dirs:
     - ./packages

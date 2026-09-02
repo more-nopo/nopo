@@ -564,7 +564,7 @@ export interface NormalizedProcess {
    * `serviceAccountName` is honored — extend as new k8s-only fields land.
    */
   kubernetes?: {
-    /** Required for processes that need RBAC beyond the namespace's default SA (e.g. af-api
+    /** Required for processes that need RBAC beyond the namespace's default SA (e.g. api
      * worker spawning agent pods needs `pods/create`). Omitted in YAML when unset — k8s falls
      * back to `default`.
      */
@@ -690,7 +690,7 @@ export interface PackageManagerConfig {
   modules: string;
   /** The docker plugin deletes it at the end of the install RUN — it is pure throwaway in an
    * image, and on the inode-bound copy/export path it is expensive: measured 146,775
-   * dirents, 47% of af-api's install layer. Bun hardlinks cache->node_modules (link count 2,
+   * dirents, 47% of api's install layer. Bun hardlinks cache->node_modules (link count 2,
    * sampled), so removing it loses no bytes.
    */
   cache_dir?: string;

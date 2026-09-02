@@ -9,9 +9,108 @@
         "@more-nopo/nopo": "workspace:*",
       },
     },
+    "nopo/plugins/diff": {
+      "name": "@more-nopo/nopo-plugin-diff",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "picomatch": "^4.0.0",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "@types/picomatch": "^4.0.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/docker": {
+      "name": "@more-nopo/nopo-plugin-docker",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "glob": "^11.0.0",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/docker-compose": {
+      "name": "@more-nopo/nopo-plugin-docker-compose",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "docker-compose": "^1.2.0",
+        "yaml": "^2.8.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "age-encryption": "^0.3.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/docs": {
+      "name": "@more-nopo/nopo-plugin-docs",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/playwright": {
+      "name": "@more-nopo/nopo-plugin-playwright",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/sonar": {
+      "name": "@more-nopo/nopo-plugin-sonar",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
+    "nopo/plugins/terraform": {
+      "name": "@more-nopo/nopo-plugin-terraform",
+      "version": "0.0.0",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "yaml": "^2.8.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "age-encryption": "^0.3.0",
+        "typescript": "^5.6.0",
+        "vite": "^6.0.0",
+        "vitest": "^3.1.1",
+      },
+    },
     "packages/nopo": {
       "name": "@more-nopo/nopo",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "bin": {
         "nopo": "./bin.js",
       },
@@ -136,6 +235,20 @@
 
     "@more-nopo/nopo": ["@more-nopo/nopo@workspace:packages/nopo"],
 
+    "@more-nopo/nopo-plugin-diff": ["@more-nopo/nopo-plugin-diff@workspace:nopo/plugins/diff"],
+
+    "@more-nopo/nopo-plugin-docker": ["@more-nopo/nopo-plugin-docker@workspace:nopo/plugins/docker"],
+
+    "@more-nopo/nopo-plugin-docker-compose": ["@more-nopo/nopo-plugin-docker-compose@workspace:nopo/plugins/docker-compose"],
+
+    "@more-nopo/nopo-plugin-docs": ["@more-nopo/nopo-plugin-docs@workspace:nopo/plugins/docs"],
+
+    "@more-nopo/nopo-plugin-playwright": ["@more-nopo/nopo-plugin-playwright@workspace:nopo/plugins/playwright"],
+
+    "@more-nopo/nopo-plugin-sonar": ["@more-nopo/nopo-plugin-sonar@workspace:nopo/plugins/sonar"],
+
+    "@more-nopo/nopo-plugin-terraform": ["@more-nopo/nopo-plugin-terraform@workspace:nopo/plugins/terraform"],
+
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
     "@noble/ciphers": ["@noble/ciphers@2.4.0", "", {}, "sha512-AnjFn0Jv92laAkvMrghlFZq4qQCIN/4DxFV/eooqtC2YTjB7kBeLMS2T9KJX4Dn+ZVXLOwK0lSgqDtx9gvxtiw=="],
@@ -212,6 +325,8 @@
 
     "@types/node": ["@types/node@22.20.1", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q=="],
 
+    "@types/picomatch": ["@types/picomatch@4.0.3", "", {}, "sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ=="],
+
     "@vitest/expect": ["@vitest/expect@3.2.7", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/spy": "3.2.7", "@vitest/utils": "3.2.7", "chai": "^5.2.0", "tinyrainbow": "^2.0.0" } }, "sha512-E8eBXaKibuvH2pSZErOjdVb5vF4PbKYcrnluBTYxEk1l/VhhwZg1kZQsdtjq+CsF5CFydf2Rdkz7jDHKSisi3w=="],
 
     "@vitest/mocker": ["@vitest/mocker@3.2.7", "", { "dependencies": { "@vitest/spy": "3.2.7", "estree-walker": "^3.0.3", "magic-string": "^0.30.17" }, "peerDependencies": { "msw": "^2.4.9", "vite": "^5.0.0 || ^6.0.0 || ^7.0.0-0" }, "optionalPeers": ["msw", "vite"] }, "sha512-Trr0hYO9CM3Wj6ksWHRhK9IZpIY6wTMO5u/MqXurMxT57sWBaOPEtP3Oq60ihZuh5JsiagKfz95OcxdEP6dBrA=="],
@@ -263,6 +378,8 @@
     "detect-indent": ["detect-indent@6.1.0", "", {}, "sha512-reYkTUJAZb9gUuZ2RvVCNhVHdg62RHnJ7WJl8ftMi4diZ6NWlciOzQN88pUhSELEwflJht4oQDv0F0BMlwaYtA=="],
 
     "dir-glob": ["dir-glob@3.0.1", "", { "dependencies": { "path-type": "^4.0.0" } }, "sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA=="],
+
+    "docker-compose": ["docker-compose@1.4.2", "", { "dependencies": { "yaml": "^2.2.2" } }, "sha512-rPHigTKGaEHpkUmfd69QgaOp+Os5vGJwG/Ry8lcr8W/382AmI+z/D7qoa9BybKIkqNppaIbs8RYeHSevdQjWww=="],
 
     "enquirer": ["enquirer@2.4.1", "", { "dependencies": { "ansi-colors": "^4.1.1", "strip-ansi": "^6.0.1" } }, "sha512-rRqJg/6gd538VHvR3PSrdRBb/1Vy2YfzHqzvbhGIQpDRKIa4FgV/54b5Q1xYSxOOwKvjXweS26E0Q+nAMwp2pQ=="],
 

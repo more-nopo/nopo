@@ -15,7 +15,7 @@ export const baseArgs = new ScriptArgs({
   since: {
     type: "string",
     description:
-      'Git ref or JSON map of per-service refs (e.g., \'{"backend":"abc","af-api":"def"}\')',
+      'Git ref or JSON map of per-service refs (e.g., \'{"backend":"abc","api":"def"}\')',
     alias: ["s"],
     default: undefined,
   },

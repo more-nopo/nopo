@@ -85,8 +85,8 @@ export function withDependencies(
 }
 
 /** Expand a set of services to include their transitive dependencies (services they depend
- * on, and services those depend on, etc.). This is the downward graph walk — if af-web
- * depends on af-api and af-api depends on db, expanding af-web yields [af-web, af-api,
+ * on, and services those depend on, etc.). This is the downward graph walk — if web
+ * depends on api and api depends on db, expanding web yields [web, api,
  * db].
  */
 export function withTransitiveDependencies(
@@ -119,7 +119,7 @@ export function withTransitiveDependencies(
 /** Expand a filtered set of services to include their transitive dependants (services that
  * depend on them, and services that depend on those, etc.). Transitive on the dependant
  * path because a change at the bottom can ripple up through the entire consumer chain. If
- * af-banana changed and af-ui depends on af-banana and af-web depends on af-ui, af-web
+ * banana changed and ui depends on banana and web depends on ui, web
  */
 export function withDependants(
   filteredServices: string[],

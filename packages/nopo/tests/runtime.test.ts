@@ -177,14 +177,14 @@ describe("isRuntimeMapShape", () => {
   });
 
   it("treats flat-shape with extra passthrough keys as flat", () => {
-    // af-nginx: flat block with passthrough `healthcheck:`. Scalars
+    // nginx: flat block with passthrough `healthcheck:`. Scalars
     // (port, cpu, deps) prove flat even if `healthcheck` is unknown.
     expect(
       isRuntimeMapShape({
         port: 80,
         cpu: "0.25",
         memory: "64Mi",
-        deps: ["af-api"],
+        deps: ["api"],
         healthcheck: { test: ["CMD", "curl"] },
       }),
     ).toBe(false);

@@ -67,19 +67,19 @@ function project(
 describe("instanceId", () => {
   it("returns bare service id for the default process", () => {
     expect(instanceId("web", "default")).toBe("web");
-    expect(instanceId("af-api", "default")).toBe("af-api");
+    expect(instanceId("api", "default")).toBe("api");
   });
 
   it("suffixes named processes with -<name>", () => {
-    expect(instanceId("af-api", "web")).toBe("af-api-web");
-    expect(instanceId("af-api", "worker")).toBe("af-api-worker");
+    expect(instanceId("api", "web")).toBe("api-web");
+    expect(instanceId("api", "worker")).toBe("api-worker");
   });
 });
 
 describe("serviceEnvKey", () => {
   it("upper-snake-cases the service id", () => {
     expect(serviceEnvKey("web")).toBe("WEB");
-    expect(serviceEnvKey("af-api-web")).toBe("AF_API_WEB");
+    expect(serviceEnvKey("api-web")).toBe("API_WEB");
     expect(serviceEnvKey("otel-collector")).toBe("OTEL_COLLECTOR");
   });
 });
@@ -88,18 +88,18 @@ describe("buildServiceRegistry", () => {
   it("registers each (serviceId, processName) under its instance id", () => {
     const reg = buildServiceRegistry([
       { serviceId: "web", processName: "default", port: 3000 },
-      { serviceId: "af-api", processName: "web", port: 3001 },
-      { serviceId: "af-api", processName: "admin", port: 3002 },
-      { serviceId: "af-api", processName: "worker", port: undefined },
+      { serviceId: "api", processName: "web", port: 3001 },
+      { serviceId: "api", processName: "admin", port: 3002 },
+      { serviceId: "api", processName: "worker", port: undefined },
     ]);
     expect(reg.get("web")).toEqual({ host: "web", port: 3000 });
-    expect(reg.get("af-api-web")).toEqual({ host: "af-api-web", port: 3001 });
-    expect(reg.get("af-api-admin")).toEqual({
-      host: "af-api-admin",
+    expect(reg.get("api-web")).toEqual({ host: "api-web", port: 3001 });
+    expect(reg.get("api-admin")).toEqual({
+      host: "api-admin",
       port: 3002,
     });
-    expect(reg.get("af-api-worker")).toEqual({
-      host: "af-api-worker",
+    expect(reg.get("api-worker")).toEqual({
+      host: "api-worker",
       port: undefined,
     });
   });
@@ -109,9 +109,9 @@ describe("svcDepEnvVars", () => {
   const registry = buildServiceRegistry([
     { serviceId: "web", processName: "default", port: 3000 },
     { serviceId: "backend", processName: "default", port: 3000 },
-    { serviceId: "af-api", processName: "web", port: 3001 },
-    { serviceId: "af-api", processName: "admin", port: 3002 },
-    { serviceId: "af-api", processName: "worker", port: undefined },
+    { serviceId: "api", processName: "web", port: 3001 },
+    { serviceId: "api", processName: "admin", port: 3002 },
+    { serviceId: "api", processName: "worker", port: undefined },
   ]);
 
   it("emits SVC_<DEP>_HOST and SVC_<DEP>_PORT for port-bearing deps", () => {
@@ -124,17 +124,17 @@ describe("svcDepEnvVars", () => {
   });
 
   it("converts dashes to underscores for multi-process dep ids", () => {
-    expect(svcDepEnvVars(["af-api-web", "af-api-admin"], registry)).toEqual({
-      SVC_AF_API_WEB_HOST: "af-api-web",
-      SVC_AF_API_WEB_PORT: "3001",
-      SVC_AF_API_ADMIN_HOST: "af-api-admin",
-      SVC_AF_API_ADMIN_PORT: "3002",
+    expect(svcDepEnvVars(["api-web", "api-admin"], registry)).toEqual({
+      SVC_API_WEB_HOST: "api-web",
+      SVC_API_WEB_PORT: "3001",
+      SVC_API_ADMIN_HOST: "api-admin",
+      SVC_API_ADMIN_PORT: "3002",
     });
   });
 
   it("omits SVC_*_PORT for port-less processes (workers)", () => {
-    expect(svcDepEnvVars(["af-api-worker"], registry)).toEqual({
-      SVC_AF_API_WORKER_HOST: "af-api-worker",
+    expect(svcDepEnvVars(["api-worker"], registry)).toEqual({
+      SVC_API_WORKER_HOST: "api-worker",
     });
   });
 
@@ -165,7 +165,7 @@ describe("projectServiceRegistry", () => {
   it("registers each process of a multi-process service under its instance id", () => {
     const reg = projectServiceRegistry(
       project({
-        "af-api": svc({
+        "api": svc({
           build: true,
           processes: [
             { name: "web", port: 3001 },
@@ -176,13 +176,13 @@ describe("projectServiceRegistry", () => {
       }),
       "default",
     );
-    expect(reg.get("af-api-web")).toEqual({ host: "af-api-web", port: 3001 });
-    expect(reg.get("af-api-admin")).toEqual({
-      host: "af-api-admin",
+    expect(reg.get("api-web")).toEqual({ host: "api-web", port: 3001 });
+    expect(reg.get("api-admin")).toEqual({
+      host: "api-admin",
       port: 3002,
     });
-    expect(reg.get("af-api-worker")).toEqual({
-      host: "af-api-worker",
+    expect(reg.get("api-worker")).toEqual({
+      host: "api-worker",
       port: undefined,
     });
   });

@@ -1,6 +1,6 @@
 /** Colon-only subcommand addressing, against the REAL repo config. Two rules are pinned
  * here: (1) A subcommand is reachable ONLY through colon syntax. The old bare-name
- * fallback (`nopo makemigrations af-api` finding af-api's nested `db:makemigrations`) is
+ * fallback (`nopo makemigrations api` finding api's nested `db:makemigrations`) is
  * GONE — one spelling per subcommand. Whole-repo fan-out already matched top-level keys
  */
 import { describe, expect, it } from "vitest";
@@ -70,7 +70,7 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
     expect(dispatchTasks(["smoketest"])).toEqual(["root:smoketest"]);
   });
 
-  it("`nopo migrate` does not recruit af-api's nested db:migrate", () => {
+  it("`nopo migrate` does not recruit api's nested db:migrate", () => {
     // The highest-consequence of the four: `db:migrate` runs real database migrations.
     // AGENTS.md documents the targeted form (`nopo migrate backend`), so a bare `nopo migrate`
     expect(dispatchTargets(["migrate"])).toEqual(["backend"]);
@@ -88,12 +88,12 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
   });
 
   it("`nopo plan` dispatches only the terraform services", () => {
-    // stripe-tf / cloudflare-tf declare `plan` top-level — those are
+    // payments-tf / dns-tf declare `plan` top-level — those are
     // intended. talos nests `upgrade: { commands: { plan: ... } }`.
-    expect(dispatchTargets(["plan"])).toEqual(["cloudflare-tf", "stripe-tf"]);
+    expect(dispatchTargets(["plan"])).toEqual(["dns-tf", "payments-tf"]);
     expect(dispatchTasks(["plan"])).toEqual([
-      "cloudflare-tf:plan",
-      "stripe-tf:plan",
+      "dns-tf:plan",
+      "payments-tf:plan",
     ]);
   });
 });
@@ -101,18 +101,18 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
 describe.skipIf(!HAS_PRODUCT_GRAPH)(
   "the bare-name nested-leaf fallback is GONE",
   () => {
-  it("`nopo makemigrations af-api` no longer reaches db:makemigrations", () => {
-    // Was the whole point of #9451. Now colon-or-nothing: af-api does not
+  it("`nopo makemigrations api` no longer reaches db:makemigrations", () => {
+    // Was the whole point of a prior dispatch bug. Now colon-or-nothing: api does not
     // declare `makemigrations` at the top level, so it is not a target.
-    expect(dispatchTargets(["makemigrations", "af-api"])).not.toContain(
-      "af-api",
+    expect(dispatchTargets(["makemigrations", "api"])).not.toContain(
+      "api",
     );
-    expect(dispatchTasks(["makemigrations", "af-api"])).toEqual([]);
+    expect(dispatchTasks(["makemigrations", "api"])).toEqual([]);
   });
 
-  it("`nopo db:makemigrations af-api` is the replacement spelling", () => {
-    expect(dispatchTasks(["db:makemigrations", "af-api"])).toEqual([
-      "af-api:db:makemigrations",
+  it("`nopo db:makemigrations api` is the replacement spelling", () => {
+    expect(dispatchTasks(["db:makemigrations", "api"])).toEqual([
+      "api:db:makemigrations",
     ]);
   });
 
@@ -130,22 +130,22 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
 describe.skipIf(!HAS_PRODUCT_GRAPH)(
   "colon selectors (asymmetric include / exclude)",
   () => {
-  // af-api's `test` declares cross-service dependencies, so a bare `test` also runs each
+  // api's `test` declares cross-service dependencies, so a bare `test` also runs each
   // dependency's own `test`. Those appear below wherever the selector still reaches them.
   const DEPS = [
     "db:test",
     "jaeger:test",
-    "litellm:test",
+    "llm-proxy:test",
     "otel-collector:test",
     "victoria-logs:test",
   ];
 
   it("bare `test` runs every leaf of the group", () => {
-    expect(dispatchTasks(["test", "af-api"])).toEqual(
+    expect(dispatchTasks(["test", "api"])).toEqual(
       [
-        "af-api:test:admin",
-        "af-api:test:integration",
-        "af-api:test:unit",
+        "api:test:admin",
+        "api:test:integration",
+        "api:test:unit",
         ...DEPS,
       ].sort(),
     );
@@ -154,34 +154,34 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
   it("an include picks one leaf — and drops the deps that lack it", () => {
     // The dependency services declare a plain `test`, never `test:unit`.
     // An include is a whitelist, so they are skipped rather than erroring.
-    expect(dispatchTasks(["test:unit", "af-api"])).toEqual([
-      "af-api:test:unit",
+    expect(dispatchTasks(["test:unit", "api"])).toEqual([
+      "api:test:unit",
     ]);
   });
 
   it("an exclude subtracts from the group and KEEPS plain-leaf services", () => {
     // The property the CI split rests on: one invocation covers both shapes. The deps have
     // nothing named `integration` to remove, so "everything except integration" is still their
-    expect(dispatchTasks(["test:-integration", "af-api"])).toEqual(
-      ["af-api:test:admin", "af-api:test:unit", ...DEPS].sort(),
+    expect(dispatchTasks(["test:-integration", "api"])).toEqual(
+      ["api:test:admin", "api:test:unit", ...DEPS].sort(),
     );
   });
 
   it("include + exclude compose, excludes winning", () => {
-    expect(dispatchTasks(["test:unit,admin,-admin", "af-api"])).toEqual([
-      "af-api:test:unit",
+    expect(dispatchTasks(["test:unit,admin,-admin", "api"])).toEqual([
+      "api:test:unit",
     ]);
   });
 
   it("an INCLUDE skips a named service whose command is a plain leaf", () => {
-    expect(dispatchTasks(["test:integration", "db", "af-api"])).toEqual([
-      "af-api:test:integration",
+    expect(dispatchTasks(["test:integration", "db", "api"])).toEqual([
+      "api:test:integration",
     ]);
   });
 
   it("an EXCLUDE keeps that same plain leaf", () => {
-    expect(dispatchTasks(["test:-integration", "db", "af-api"])).toEqual(
-      ["af-api:test:admin", "af-api:test:unit", ...DEPS].sort(),
+    expect(dispatchTasks(["test:-integration", "db", "api"])).toEqual(
+      ["api:test:admin", "api:test:unit", ...DEPS].sort(),
     );
   });
 });
@@ -231,8 +231,8 @@ describe.skipIf(!HAS_PRODUCT_GRAPH)(
     CommandScript.parseCommandArgs(runner);
   }
 
-  it("`nopo test integration af-api` treats `integration` as a target", () => {
-    expect(() => parse(["test", "integration", "af-api"])).toThrow(
+  it("`nopo test integration api` treats `integration` as a target", () => {
+    expect(() => parse(["test", "integration", "api"])).toThrow(
       /Unknown target/,
     );
   });

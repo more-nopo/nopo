@@ -98,9 +98,9 @@ describe("renderPlanDag — trivial-plan suppression", () => {
   });
 
   it("renders a one-line summary for a single-node plan", () => {
-    const plan = planFromNodes([builtin("only", [], "af-api")]);
+    const plan = planFromNodes([builtin("only", [], "api")]);
     const out = renderPlanDag(plan);
-    expect(out).toBe("Plan: 1 node — build:exec af-api\n");
+    expect(out).toBe("Plan: 1 node — build:exec api\n");
   });
 
   it("renderTrivialSummary handles a plugin-hook handler without target", () => {
@@ -217,9 +217,9 @@ describe("nodeLabel", () => {
       id: "n",
       handler: { kind: "builtin", name: "build:exec" },
       needs: [],
-      target: "af-api",
+      target: "api",
     };
-    expect(nodeLabel(node)).toBe("build:exec af-api");
+    expect(nodeLabel(node)).toBe("build:exec api");
   });
 
   it("formats plugin-hook handlers as `<plugin>.<hook>`", () => {
@@ -227,9 +227,9 @@ describe("nodeLabel", () => {
       id: "n",
       handler: { kind: "plugin-hook", plugin: "docker", hook: "build" },
       needs: [],
-      target: "af-api",
+      target: "api",
     };
-    expect(nodeLabel(node)).toBe("docker.build af-api");
+    expect(nodeLabel(node)).toBe("docker.build api");
   });
 
   it("omits the target portion when target is undefined/empty", () => {
@@ -419,10 +419,10 @@ describe("renderPlanDag — M9 status overlay invariants", () => {
   it("≤1-node plans suppress to the M5 trivial summary even with statuses", () => {
     // Auto-suppression matches M5 — no symbol prefix is layered onto
     // the one-line summary either; `renderTrivialSummary` is M5 code.
-    const plan = planFromNodes([builtin("only", [], "af-api")]);
+    const plan = planFromNodes([builtin("only", [], "api")]);
     const statuses = new Map<string, NodeStatus>([["only", "failure"]]);
     const out = renderPlanDag(plan, { width: 120, statuses, useColor: true });
-    expect(out).toBe("Plan: 1 node — build:exec af-api\n");
+    expect(out).toBe("Plan: 1 node — build:exec api\n");
   });
 });
 
@@ -500,7 +500,7 @@ describe("nodeLabel — MT3 batch suffix", () => {
     const node = batchNode("build:bake", [
       "build:web",
       "build:backend",
-      "build:af-api",
+      "build:api",
     ]);
     expect(nodeLabel(node)).toBe("docker.build [+3 batched]");
   });

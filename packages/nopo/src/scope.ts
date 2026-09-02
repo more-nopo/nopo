@@ -95,7 +95,7 @@ function buildCommandScope(
   const targets = runner.resolvedTargets ?? [];
 
   // Targets can resolve the SAME user-typed name to DIFFERENT paths: `makemigrations` is
-  // top-level on the Django backend but nested at `db:makemigrations` on af-api. Resolve
+  // top-level on the Django backend but nested at `db:makemigrations` on api. Resolve
   const entries = runner.config.project.services.entries;
   const commandPaths = new Map<string, string>();
   for (const target of targets) {

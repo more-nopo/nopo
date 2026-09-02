@@ -9,6 +9,6 @@
   "updateInternalDependencies": "patch",
   "ignore": [],
   "snapshot": {
-    "prereleaseTemplate": "{tag}.{commit-short}"
+    "prereleaseTemplate": "{tag}.{commit}"
   }
 }

@@ -42,9 +42,9 @@ const ENC_PLACEHOLDER =
 describe("setSecretCiphertext format preservation", () => {
   it("does not re-fold long scalars elsewhere in the file", () => {
     const longUrl =
-      "https://48f1125e47833a3c015e2be12c4706c9@o4511156242939904.ingest.us.sentry.io/4511156271251456";
+      "https://00000000000000000000000000000000@o0000000000000000.ingest.us.sentry.io/0000000000000000";
     const yml = [
-      "name: af-api",
+      "name: api",
       "env:",
       `  SENTRY_DSN: "${longUrl}"`,
       "runtime:",
@@ -66,7 +66,7 @@ describe("setSecretCiphertext format preservation", () => {
 
   it("preserves flow-style sequences without re-padding", () => {
     const yml = [
-      "name: af-api",
+      "name: api",
       "tags: [platform]",
       "package_managers: [bun]",
       "runtime:",
@@ -88,7 +88,7 @@ describe("setSecretCiphertext format preservation", () => {
     // Root-level `secrets:` is the legacy declaration array (env-var names services need at
     // runtime). The runtime envelope map lives under `runtime.<name>.secrets:`.
     const yml = [
-      "name: af-api",
+      "name: api",
       "secrets:",
       "  - BETTER_AUTH_SECRET:",
       '      test: "test-secret-minimum-32-characters-long"',
@@ -119,7 +119,7 @@ describe("setSecretCiphertext format preservation", () => {
 
   it("preserves comments and quoting style on existing values", () => {
     const yml = [
-      "name: af-api",
+      "name: api",
       "# Top-level comment about env",
       "env:",
       '  BETTER_AUTH_URL: "https://app.example.com"',

@@ -230,7 +230,7 @@ export function selectChildNames(
 /** Only the ROOT has to exist here — everything after the first colon is navigated by
  * `resolveCommand`, which skips (rather than errors) when a service simply doesn't declare
  * that subcommand. There is deliberately NO bare-name fallback to a nested leaf: colon
- * addressing is the only way to reach a subcommand, so `nopo makemigrations af-api` no
+ * addressing is the only way to reach a subcommand, so `nopo makemigrations api` no
  */
 export function resolveServiceCommandPath(
   service: NormalizedService,
@@ -273,7 +273,7 @@ export interface CommandDispatchCheck {
 /** The wrapper used to exit 0 after dispatching an empty target list:
  * `CommandScript.targetFilter` dropped every service that didn't declare the command, and
  * the only guard was "is this command defined on ANY service?". `nopo makemigrations
- * af-api` slipped through that guard — `makemigrations` exists on the Django backend,
+ * api` slipped through that guard — `makemigrations` exists on the Django backend,
  */
 export function assertCommandDispatches(check: CommandDispatchCheck): void {
   const {
@@ -449,7 +449,7 @@ function resolveSubCommandPath(
     currentPath = `${currentPath}:${part}`;
 
     // A service that simply doesn't declare this subcommand is SKIPPED, not an error: `nopo
-    // test:integration db af-api` must run af-api and leave db alone. A missing ROOT command
+    // test:integration db api` must run api and leave db alone. A missing ROOT command
     if (!current.commands || !current.commands[part]) {
       return [];
     }

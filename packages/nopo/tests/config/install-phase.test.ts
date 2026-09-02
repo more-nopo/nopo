@@ -54,10 +54,10 @@ describe("resolveInstallCommand — {service_dir}", () => {
   it("expands the token so callers never post-process the command", () => {
     expect(
       resolveInstallCommand(scoped, "build", {
-        serviceDir: "products/agent-flow/af-api",
+        serviceDir: "products/example/api",
       }),
     ).toBe(
-      "bun install --frozen-lockfile --filter './products/agent-flow/af-api'",
+      "bun install --frozen-lockfile --filter './products/example/api'",
     );
   });
 

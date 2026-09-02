@@ -2,11 +2,12 @@
   "name": "nopo",
   "version": "0.0.1",
   "private": true,
-  "description": "nopo CLI",
+  "description": "nopo CLI and first-party plugins",
   "type": "module",
   "license": "GPL-3.0-only",
   "workspaces": [
-    "packages/nopo"
+    "packages/nopo",
+    "nopo/plugins/*"
   ],
   "scripts": {
     "postinstall": "cd packages/nopo && (bun unlink 2>/dev/null || true) && bun link"
