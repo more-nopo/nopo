@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@more-nopo/nopo": "workspace:*",
+    "@more-nopo/nopo": "^0.0.1",
     "glob": "^11.0.0"
   },
   "devDependencies": {
