@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "nopo": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["nopo/mcp/src/index.ts"]
+    }
+  }
+}
