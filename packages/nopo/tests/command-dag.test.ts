@@ -133,11 +133,11 @@ describe("resolveCommandDag", () => {
   it("reports the offending service id in errors", () => {
     expect(() =>
       resolveCommandDag({
-        serviceId: "af-api",
+        serviceId: "api",
         commands: {},
         roots: ["missing"],
       }),
-    ).toThrowError(/Service "af-api"/);
+    ).toThrowError(/Service "api"/);
   });
 });
 
@@ -191,7 +191,7 @@ describe("serializeCommandDagAsShell", () => {
       types: cmd({ command: "bun x tsc -p tsconfig.types.json" }),
     };
     const steps = resolveCommandDag({
-      serviceId: "af-api",
+      serviceId: "api",
       commands,
       roots: ["admin", "types"],
     });

@@ -195,7 +195,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const apiKeyCipher = await encryptValue("sk-real-secret-value", recipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -210,7 +210,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const runner = makeRunner(services, root);
     const yaml = await generateComposeFile(runner, "default");
     const parsed = yamlParse(yaml);
-    const envVars = getEnvMap(parsed, "af-api");
+    const envVars = getEnvMap(parsed, "api");
 
     expect(envVars.ANTHROPIC_API_KEY).toBe("sk-real-secret-value");
     // The original ENC[...] envelope must NOT appear anywhere in the
@@ -226,7 +226,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const prodCipher = await encryptValue("prod-value", recipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -246,8 +246,8 @@ describe("compose generation: runtime-overlay secrets", () => {
     const defYaml = await generateComposeFile(runner, "default");
     const prodYaml = await generateComposeFile(runner, "prod");
 
-    expect(getEnvMap(yamlParse(defYaml), "af-api").K).toBe("default-value");
-    expect(getEnvMap(yamlParse(prodYaml), "af-api").K).toBe("prod-value");
+    expect(getEnvMap(yamlParse(defYaml), "api").K).toBe("default-value");
+    expect(getEnvMap(yamlParse(prodYaml), "api").K).toBe("prod-value");
   });
 
   it("inherits the default secret when a named overlay omits it", async () => {
@@ -261,7 +261,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const cipher = await encryptValue("inherited-default", recipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -279,7 +279,7 @@ describe("compose generation: runtime-overlay secrets", () => {
 
     const runner = makeRunner(services, root);
     const yaml = await generateComposeFile(runner, "prod");
-    expect(getEnvMap(yamlParse(yaml), "af-api").K).toBe("inherited-default");
+    expect(getEnvMap(yamlParse(yaml), "api").K).toBe("inherited-default");
   });
 
   it("aborts compose-gen with a service+key-tagged error on decrypt failure", async () => {
@@ -296,7 +296,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     );
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -311,7 +311,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const runner = makeRunner(services, root);
 
     await expect(generateComposeFile(runner, "default")).rejects.toThrow(
-      /Failed to decrypt secret "BROKER_KEK" for service "af-api"/,
+      /Failed to decrypt secret "BROKER_KEK" for service "api"/,
     );
   });
 
@@ -332,7 +332,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const cipher = await encryptValue("plaintext-never-seen", tmpRecipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -349,7 +349,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const yaml = await generateComposeFile(runner, "default", {
       secretMode: "redact",
     });
-    const envVars = getEnvMap(yamlParse(yaml), "af-api");
+    const envVars = getEnvMap(yamlParse(yaml), "api");
 
     // Secrets are redacted; env values pass through verbatim.
     expect(envVars.ANTHROPIC_API_KEY).toBe(REDACTED_PLACEHOLDER);
@@ -369,7 +369,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const root = makeProjectRoot();
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -387,7 +387,7 @@ describe("compose generation: runtime-overlay secrets", () => {
 
     const runner = makeRunner(services, root);
     const yaml = await generateComposeFile(runner, "default");
-    expect(getEnvMap(yamlParse(yaml), "af-api").LOCAL_PASSWORD).toBe(
+    expect(getEnvMap(yamlParse(yaml), "api").LOCAL_PASSWORD).toBe(
       "${LOCAL_PASSWORD:-dev}",
     );
   });
@@ -403,7 +403,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const cipher = await encryptValue("must-not-touch-disk", tmpRecipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,
@@ -442,7 +442,7 @@ describe("compose generation: runtime-overlay secrets", () => {
     const cipher = await encryptValue("never-on-disk", recipient);
 
     const services = {
-      "af-api": makeService("af-api", {
+      "api": makeService("api", {
         default: {
           command: "bun run src/index.ts",
           port: 3001,

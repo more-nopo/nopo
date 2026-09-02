@@ -74,7 +74,7 @@ const DEFAULT_PROCESS_NAME = "default";
 
 /** Compose service name for a given process. - The synthesized `default` process keeps the bare service
  * id (zero-diff for single-process services). - Named processes are suffixed with `-${name}` so
- * cross-service references (e.g. nginx upstream `af-api`) keep resolving to the default/web process.
+ * cross-service references (e.g. nginx upstream `api`) keep resolving to the default/web process.
  */
 function composeServiceName(serviceId: string, processName: string): string {
   return processName === DEFAULT_PROCESS_NAME
@@ -329,7 +329,7 @@ type SecretResolver = (
   ctx: { service: string; key: string },
 ) => Promise<string>;
 
-/** Multi-process services (e.g. af-api with `processes.web` and `processes.worker`) call this once per
+/** Multi-process services (e.g. api with `processes.web` and `processes.worker`) call this once per
  * process. Single-process services pass the synthesized `default` process, preserving zero-diff
  * behaviour.
  */
@@ -812,7 +812,7 @@ export async function generateComposeFile(
 
   /** Generate service definitions — one compose entry per process. Single-process services have a
    * synthesized `default` process so they emit one entry under the bare service id (zero-diff).
-   * Multi-process services (e.g. af-api with web + worker) emit `${id}` for the first named process and
+   * Multi-process services (e.g. api with web + worker) emit `${id}` for the first named process and
    * `${id}-${name}` for subsequent ones.
    */
   for (const id of includedServices) {

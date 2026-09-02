@@ -10,7 +10,7 @@ import { parse } from "yaml";
 import { type ServiceManifest, yamlDeployment } from "./index.ts";
 
 /** The single nopo Healthcheck declaration drives both compose `healthcheck:` (docker-compose plugin)
- * and the k8s readinessProbe block (terraform plugin), so litellm and any future production-on-k8s
+ * and the k8s readinessProbe block (terraform plugin), so llm-proxy and any future production-on-k8s
  * service stops racing rollout-vs-readiness.
  */
 
@@ -106,13 +106,13 @@ const LITELLM_HEALTHCHECK: Healthcheck = {
 describe("yamlDeployment — readinessProbe emission", () => {
   it("emits a readinessProbe that mirrors the unified healthcheck field-for-field", () => {
     const proc = makeProcess({
-      command: "litellm --config /app/config.yaml",
+      command: "llm-proxy --config /app/config.yaml",
       port: 4000,
       cpu: "0.5",
       memory: "2Gi",
       healthcheck: LITELLM_HEALTHCHECK,
     });
-    const svc = makeManifest("litellm", proc);
+    const svc = makeManifest("llm-proxy", proc);
 
     const yaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
@@ -130,7 +130,7 @@ describe("yamlDeployment — readinessProbe emission", () => {
     const probe = doc.spec?.template?.spec?.containers?.[0]?.readinessProbe;
 
     expect(probe).toMatchObject({
-      // Field mapping verified per acceptance criteria — litellm spec values
+      // Field mapping verified per acceptance criteria — llm-proxy spec values
       // (`initialDelaySeconds: 30`, `periodSeconds: 10`, ...).
       initialDelaySeconds: 30,
       periodSeconds: 10,
@@ -211,7 +211,7 @@ describe("yamlDeployment — readinessProbe emission", () => {
       // No port. Healthcheck still declared — but the plugin must not emit it.
       healthcheck: LITELLM_HEALTHCHECK,
     });
-    const svc = makeManifest("af-api", proc);
+    const svc = makeManifest("api", proc);
 
     const yaml = yamlDeployment(svc, "nopo-dev", {
       isDb: false,
@@ -229,7 +229,7 @@ describe("yamlDeployment — readinessProbe emission", () => {
     expect(yaml).not.toContain("readinessProbe");
   });
 
-  /** For images without curl/wget (e.g. litellm's upstream python:slim) the `type: http` healthcheck
+  /** For images without curl/wget (e.g. llm-proxy's upstream python:slim) the `type: http` healthcheck
    * emits `readinessProbe.httpGet:` — k8s runs the probe from the kubelet, not in-container, so image
    * binary inventory is irrelevant. `port` falls back to the runtime port when the healthcheck omits its
    * own.
@@ -247,13 +247,13 @@ describe("yamlDeployment — readinessProbe emission", () => {
 
   it("emits httpGet with explicit port for type: http", () => {
     const proc = makeProcess({
-      command: "litellm --config /app/config.yaml",
+      command: "llm-proxy --config /app/config.yaml",
       port: 4000,
       cpu: "0.5",
       memory: "2Gi",
       healthcheck: LITELLM_HTTP_HEALTHCHECK,
     });
-    const svc = makeManifest("litellm", proc);
+    const svc = makeManifest("llm-proxy", proc);
 
     const yaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
@@ -299,11 +299,11 @@ describe("yamlDeployment — readinessProbe emission", () => {
       delay: "30s",
     };
     const proc = makeProcess({
-      command: "litellm --config /app/config.yaml",
+      command: "llm-proxy --config /app/config.yaml",
       port: 4000,
       healthcheck: hc,
     });
-    const svc = makeManifest("litellm", proc);
+    const svc = makeManifest("llm-proxy", proc);
 
     const yaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
@@ -412,18 +412,18 @@ describe("yamlDeployment — readinessProbe emission", () => {
 });
 
 describe("no startupProbe is emitted", () => {
-  /** Regression, prod 2026-08-19: a startupProbe sized from `healthcheck.delay` KILLED litellm.
+  /** Regression, prod 2026-08-19: a startupProbe sized from `healthcheck.delay` KILLED llm-proxy.
    * A failing readinessProbe only holds a pod out of the Service; a failing startupProbe makes
    * kubelet kill the container, so an under-sized budget turns a slow boot into a crash loop.
-   * litellm burned 11 restarts before this was reverted. Readiness owns the cold-start budget.
+   * llm-proxy burned 11 restarts before this was reverted. Readiness owns the cold-start budget.
    */
   it("emits only a readinessProbe, never a startupProbe", () => {
     const proc = makeProcess({
-      command: "litellm --config /app/config.yaml",
+      command: "llm-proxy --config /app/config.yaml",
       port: 4000,
       healthcheck: LITELLM_HEALTHCHECK,
     });
-    const svc = makeManifest("litellm", proc);
+    const svc = makeManifest("llm-proxy", proc);
     const yaml = yamlDeployment(svc, "nopo-prod", {
       isNginx: false,
       isDb: false,

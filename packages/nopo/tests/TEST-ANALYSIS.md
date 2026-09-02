@@ -307,7 +307,7 @@ The test suite is organized into 5 main test files, each covering a specific asp
 
 **Verification**:
 
-- ✅ Matches documentation: "Uses `pnpm --filter @more/{target} run {command}` for each target" (line 211)
+- ✅ Matches documentation: "Uses `pnpm --filter @more-nopo/{target} run {command}` for each target" (line 211)
 - ✅ Matches documentation: "If no targets: `pnpm run {command}` at root level" (line 212)
 - ✅ Matches sequence diagram (lines 195-208)
 - ✅ Matches documentation: "Dependencies: Only `EnvScript`" (line 216)

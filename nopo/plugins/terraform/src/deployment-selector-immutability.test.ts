@@ -187,7 +187,7 @@ describe("Deployment.spec.strategy — RWO PVC deadlock prevention", () => {
 
   it("omits strategy on non-db Deployments (K8s default RollingUpdate is correct without RWO PVC)", () => {
     const { svc, process } = buildService({
-      id: "af-api",
+      id: "api",
       image: "example/app-api:test",
       port: 3000,
       isInfra: false,
@@ -199,7 +199,7 @@ describe("Deployment.spec.strategy — RWO PVC deadlock prevention", () => {
       isCI: true,
       projectRoot: "/proj",
       nginxTemplatePath: null,
-      secretName: "af-api-secrets",
+      secretName: "api-secrets",
       configMounts: [],
       process,
       port: 3000,

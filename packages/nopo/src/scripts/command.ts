@@ -96,7 +96,7 @@ type CommandScriptArgs = {
   /**
    * Everything after a bare `--`, appended verbatim to every task's
    * command line. Lets a caller reach the underlying tool without nopo
-   * knowing its flags: `nopo integration af-api -- --shard=1/2`.
+   * knowing its flags: `nopo integration api -- --shard=1/2`.
    */
   passthrough: string[];
 };
@@ -266,8 +266,8 @@ export default class CommandScript extends Script {
 
   /** Filter targets to only services that can actually run the command. Resolution goes
    * through {@link resolveServiceCommandPath}. For a service the user NAMED on the CLI, a
-   * bare name declared only under a grouping parent still matches (af-api's
-   * `db:makemigrations` answers to `nopo makemigrations af-api`). That leaf fallback is
+   * bare name declared only under a grouping parent still matches (api's
+   * `db:makemigrations` answers to `nopo makemigrations api`). That leaf fallback is
    */
   static override targetFilter = (
     service: NormalizedService,
@@ -416,8 +416,8 @@ export default class CommandScript extends Script {
     // Get since value
     const since = typeof parsed.since === "string" ? parsed.since : undefined;
 
-    // Subcommands are reached only through colon syntax (`nopo test:integration af-api`), so
-    // there is nothing to disambiguate — `nopo test integration af-api` fails
+    // Subcommands are reached only through colon syntax (`nopo test:integration api`), so
+    // there is nothing to disambiguate — `nopo test integration api` fails
     const positionalArgs: string[] = parsed._ || [];
     let targets: string[] = positionalArgs.map((t) => t.toLowerCase());
     const explicitTargets = targets.length > 0;

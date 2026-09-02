@@ -380,7 +380,7 @@ describe("isDockerBakeTarget", () => {
   });
 
   it("returns true for a service with plugins.docker AND build.dockerfile (no runtime)", () => {
-    // Mirrors af-act: build-only image, opted into docker baking.
+    // Mirrors act: build-only image, opted into docker baking.
     const service = makeNormalizedService({
       type: "package",
       runtime: undefined,

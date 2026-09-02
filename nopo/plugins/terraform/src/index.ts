@@ -40,8 +40,8 @@ const DB_NODE_PORT = 30432;
 
 /** Whether a service runs as a Kubernetes workload (Deployment) during `nopo up`. A service is
  * deployable only if it has SOMETHING to run: a built image (its own Dockerfile → `service.build`) or
- * a pinned upstream `image`. CLI-only control-plane services — `infrastructure/cloudflare-tf`,
- * `infrastructure/stripe-tf` — have NEITHER.
+ * a pinned upstream `image`. CLI-only control-plane services — `infrastructure/dns-tf`,
+ * `infrastructure/payments-tf` — have NEITHER.
  */
 export function isDeployableWorkload(service: NormalizedService): boolean {
   return Boolean(service.build || service.image);
@@ -83,7 +83,7 @@ export function resolveNamespace(
 }
 
 /** Derive the SERVICE name from a pod's `app` label and `nopo.process` label. Multi-process services
- * label each pod `<service>-<process>` (e.g. `af-api-web`, `af-api-worker`, `af-api-admin`) and stamp
+ * label each pod `<service>-<process>` (e.g. `api-web`, `api-worker`, `api-admin`) and stamp
  * the process name on `nopo.process` (`web` / `worker` / `admin`). `deployed-sha` MUST key its SHA map
  * by SERVICE so the keys match `nopo build --changed --since`'s service ids.
  */
@@ -406,7 +406,7 @@ export class K8sDeployer {
        */
       const previewHint = this.isPreviewNamespace
         ? " In nopo-prev only services with a `runtime.preview` overlay are" +
-          " deployable (platform deps like db/litellm/otel are shared from" +
+          " deployable (platform deps like db/llm-proxy/otel are shared from" +
           " nopo-prod and filtered out)."
         : "";
       const requested =
@@ -508,7 +508,7 @@ export class K8sDeployer {
 
     /** Deploy declared dependencies (e.g., db) for the ACTIVE runtime. Reading `service.runtimeDeps` here
      * uses the DEFAULT block's deps — so under a preview runtime it would pull the shared platform
-     * services (db, litellm, otel-collector) that the preview overlay deliberately drops from `deps` (they
+     * services (db, llm-proxy, otel-collector) that the preview overlay deliberately drops from `deps` (they
      * run once in nopo-prod and are reached cross-namespace).
      */
     const serviceOverlay = resolveRuntime(service.runtimes, this.ctx.runtime);
@@ -870,7 +870,7 @@ export class K8sDeployer {
     /** `dev-only` services are never deployed to the production namespace (nopo-prod) or preview namespaces
      * (nopo-prev), even when the caller names them explicitly — their k8s manifests aren't
      * production-ready yet (observability services need ConfigMap-mounted provisioning; tracked in
-     * apps/observability/README.md). In any other namespace they go out normally so `nopo up grafana` in a
+     * apps/metrics/README.md). In any other namespace they go out normally so `nopo up grafana` in a
      */
     const isProdOrPreview =
       this.namespace === "nopo-prod" || this.isPreviewNamespace;
@@ -882,12 +882,12 @@ export class K8sDeployer {
       if (targetSet.size > 0 && !targetSet.has(id)) continue;
       if (isProdOrPreview && service.tags.includes("dev-only")) continue;
       /** Preview deploys the product plane ONLY — services that opt in with a runtime.preview overlay. The
-       * runner expands explicit targets with each service's DEFAULT runtime deps (db, litellm, otel, …)
+       * runner expands explicit targets with each service's DEFAULT runtime deps (db, llm-proxy, otel, …)
        * before the plugin runs, so those platform services arrive in `targetSet`; filter them out by overlay
        * opt-in so the preview doesn't clone the whole nopo-prod stack (and blow the namespace
        */
       if (this.isPreviewNamespace && !optsIntoPreview(service)) continue;
-      /** CLI-only control-plane services (cloudflare-tf, stripe-tf): no build
+      /** CLI-only control-plane services (dns-tf, payments-tf): no build
        * AND no image, so there is nothing to run as a workload. Skip them so
        * the deploy doesn't synthesize a Deployment that pulls a nonexistent
        * `nopo-<id>` image (ImagePullBackOff). See isDeployableWorkload.
@@ -1359,7 +1359,7 @@ export class K8sDeployer {
           try {
             /** 600s (not 300s): on the constrained prod cluster a freshly built image can take several minutes to
              * pull + schedule before the pod is even Running, and that wait counts against `rollout status`. 300s
-             * was failing deploys whose pods were healthy but slow to schedule (e.g. litellm pulling a rebuilt
+             * was failing deploys whose pods were healthy but slow to schedule (e.g. llm-proxy pulling a rebuilt
              * image), so the bound tracks worst-case pull+boot, not just boot.
              */
             await this
@@ -2176,7 +2176,7 @@ export function yamlDeployment(
     mergedEnv.PORT = String(opts.port);
   }
 
-  /** In-cluster TLS for Bun runtimes that talk to the k8s API. Background: af-api's worker uses
+  /** In-cluster TLS for Bun runtimes that talk to the k8s API. Background: api's worker uses
    * @kubernetes/client-node, which calls `loadFromCluster()`, reads /var/run/secrets/kubernetes.io/
    * serviceaccount/ca.crt, and attaches an `https.Agent({ ca })` to the request context.
    */
@@ -2191,7 +2191,7 @@ export function yamlDeployment(
     )
     .join("\n");
 
-  /** Per-Pod NOPO_NAMESPACE via downward API. Production blocker: KubernetesProvider in af-api falls back
+  /** Per-Pod NOPO_NAMESPACE via downward API. Production blocker: KubernetesProvider in api falls back
    * to the literal "default" namespace when NOPO_NAMESPACE is unset, so it tries to manage agent pods in
    * `default` instead of the deploy namespace (e.g. `nopo-prod`) and gets a 403 from the API server.
    */
@@ -2405,8 +2405,8 @@ ${postCmd
 
   /** Per-process ServiceAccount binding. Emitted only when the process declares
    * `kubernetes.serviceAccountName` in nopo.yml — otherwise the key is omitted entirely and k8s falls
-   * back to the namespace's `default` SA (legacy behavior, every other Deployment). The af-api worker
-   * process needs `af-runner` here so its RBAC covers pods/create + pods/delete (the runtime spawn path
+   * back to the namespace's `default` SA (legacy behavior, every other Deployment). The api worker
+   * process needs `runner` here so its RBAC covers pods/create + pods/delete (the runtime spawn path
    */
   const sa = proc.kubernetes?.serviceAccountName;
   const serviceAccountBlock = sa ? `      serviceAccountName: ${sa}\n` : "";

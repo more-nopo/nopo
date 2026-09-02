@@ -119,7 +119,7 @@ describe("applyDefaults", () => {
     const svc = makeService({
       id: "grafana",
       paths: {
-        root: "/project/apps/observability/grafana",
+        root: "/project/apps/metrics/grafana",
         context: "/project",
       },
     });
@@ -129,9 +129,9 @@ describe("applyDefaults", () => {
       "/project",
     );
     expect(resolved.projectKey).toBe("nopo-grafana");
-    expect(resolved.projectName).toBe("nopo / apps/observability/grafana");
+    expect(resolved.projectName).toBe("nopo / apps/metrics/grafana");
     expect(resolved.projectVersion).toBe("1.0");
-    expect(resolved.relativePath).toBe("apps/observability/grafana");
+    expect(resolved.relativePath).toBe("apps/metrics/grafana");
   });
 
   it("respects overrides", () => {

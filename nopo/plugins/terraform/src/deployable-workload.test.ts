@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { isDeployableWorkload } from "./index.ts";
 
 /** `isDeployableWorkload` only reads `build` and `image`, so a minimal stub is enough. Regression guard
- * for the release break where a CLI-only control-plane service (infrastructure/stripe-tf) with neither
+ * for the release break where a CLI-only control-plane service (infrastructure/payments-tf) with neither
  * a Dockerfile nor an upstream image got a Deployment that ImagePullBackOff'd on a nonexistent
- * `nopo-stripe-tf` image.
+ * `nopo-payments-tf` image.
  */
 function svc(fields: { build?: unknown; image?: string }): NormalizedService {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- test stub: only build/image are read

@@ -72,7 +72,7 @@ async function getSecret(
 }
 
 /** Bound `secrets` namespace, intended for ergonomic use: import { secrets } from
- * "nopo/secrets"; const v = await secrets.get("af-api", "default", "BROKER_KEK", { project
+ * "nopo/secrets"; const v = await secrets.get("api", "default", "BROKER_KEK", { project
  * }); The shape mirrors the spec acceptance criterion verbatim ("`secrets.get(svcId,
  * runtime, key)` decrypts one value via configured key").
  */

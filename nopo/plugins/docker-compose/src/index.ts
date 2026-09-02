@@ -203,7 +203,7 @@ async function composeUp(context: HookContext): Promise<void> {
   }
 
   /** The compose file was already filtered to the resolved targets during generation (via `targetSet` in
-   * generateComposeFile). For multi-process services (e.g. af-api → af-api-web + af-api-worker), compose
+   * generateComposeFile). For multi-process services (e.g. api → api-web + api-worker), compose
    * service names don't match nopo service IDs — upMany(nopo-ids) would fail with "no such service". Use
    * upAll so docker compose starts every service in the (pre-filtered) document.
    */
@@ -270,7 +270,7 @@ async function composeDown(context: HookContext): Promise<void> {
   });
 
   /** The compose file is pre-filtered to the resolved targets. Use downAll so
-   * multi-process services (e.g. af-api → af-api-web + af-api-worker) are
+   * multi-process services (e.g. api → api-web + api-worker) are
    * torn down correctly — passing nopo service IDs would fail with "no such
    * service" for any service whose compose name differs from its nopo ID.
    */

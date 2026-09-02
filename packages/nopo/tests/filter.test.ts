@@ -418,9 +418,9 @@ describe("parseSinceArg", () => {
   });
 
   it("parses JSON object into sinceMap", () => {
-    const input = '{"backend":"abc123","af-api":"def456"}';
+    const input = '{"backend":"abc123","api":"def456"}';
     expect(parseSinceArg(input)).toEqual({
-      sinceMap: { backend: "abc123", "af-api": "def456" },
+      sinceMap: { backend: "abc123", "api": "def456" },
     });
   });
 
@@ -481,7 +481,7 @@ describe("sinceMap filtering", () => {
 
     const context: FilterContext = {
       projectRoot: "/project",
-      sinceMap: { "af-api": "sha-afapi" },
+      sinceMap: { "api": "sha-api" },
     };
 
     const backendService = createMockService({
@@ -504,7 +504,7 @@ describe("sinceMap filtering", () => {
     vi.mocked(GitInfo.getChangedFiles).mockImplementation((ref: string) => {
       if (ref === "abc1230") {
         return [
-          "apps/observability/grafana/provisioning/dashboards/cluster-health.json",
+          "apps/metrics/grafana/provisioning/dashboards/cluster-health.json",
         ];
       }
       return [];
@@ -530,7 +530,7 @@ describe("sinceMap filtering", () => {
       image: "grafana/grafana-oss:11.5.0",
       build: undefined,
       paths: {
-        root: "/project/apps/observability/grafana",
+        root: "/project/apps/metrics/grafana",
         context: "/project",
       },
     });
@@ -547,7 +547,7 @@ describe("sinceMap filtering", () => {
     // victoria-logs: image pinned, no dir changes since fleet baseline →
     // no need to redeploy.
     vi.mocked(GitInfo.getChangedFiles).mockReturnValue([
-      "apps/observability/grafana/nopo.yml",
+      "apps/metrics/grafana/nopo.yml",
     ]);
     vi.mocked(GitInfo.getCommitTimestamp).mockReturnValue(1_700_000_000);
 
@@ -565,7 +565,7 @@ describe("sinceMap filtering", () => {
       image: "victoriametrics/victoria-logs:v0.42.0",
       build: undefined,
       paths: {
-        root: "/project/apps/observability/victoria-logs",
+        root: "/project/apps/metrics/logs",
         context: "/project",
       },
     });
@@ -620,7 +620,7 @@ describe("sinceMap filtering", () => {
       sinceMap: {
         backend: sameSha,
         web: sameSha,
-        "af-api": differentSha,
+        "api": differentSha,
       },
     };
 
@@ -634,8 +634,8 @@ describe("sinceMap filtering", () => {
         paths: { root: "/project/apps/web", context: "/project" },
       }),
       createMockService({
-        id: "af-api",
-        paths: { root: "/project/apps/af-api", context: "/project" },
+        id: "api",
+        paths: { root: "/project/apps/api", context: "/project" },
       }),
     ];
 
@@ -666,20 +666,20 @@ describe("build.include extends change detection", () => {
     vi.mocked(GitInfo.getDefaultBranch).mockReturnValue("main");
   });
 
-  // af-web bundles shared packages and declares them in build.include. A change to a
+  // web bundles shared packages and declares them in build.include. A change to a
   // declared input must mark the consumer changed — otherwise its tests never run on the PR
   const afWeb = () =>
     createMockService({
-      id: "af-web",
+      id: "web",
       paths: {
-        root: "/project/products/agent-flow/af-web",
+        root: "/project/products/example/web",
         context: "/project",
       },
       build: {
         command: "build",
         deps: [],
         include: [
-          "products/agent-flow/af-web",
+          "products/example/web",
           "packages/ui",
           "packages/configs",
         ],
@@ -695,16 +695,16 @@ describe("build.include extends change detection", () => {
 
   it("still honors the service's own root when build.include is set", () => {
     vi.mocked(GitInfo.getChangedFiles).mockReturnValue([
-      "products/agent-flow/af-web/app/root.tsx",
+      "products/example/web/app/root.tsx",
     ]);
     expect(matchesFilter(afWeb(), changedFilter, context)).toBe(true);
   });
 
   it("does not mark a consumer changed for a path it does not include", () => {
-    // af-web does NOT include the af-api source, so an af-api-only change must
+    // web does NOT include the api source, so an api-only change must
     // leave it unchanged (no spurious fan-out).
     vi.mocked(GitInfo.getChangedFiles).mockReturnValue([
-      "products/agent-flow/af-api/src/index.ts",
+      "products/example/api/src/index.ts",
     ]);
     expect(matchesFilter(afWeb(), changedFilter, context)).toBe(false);
   });

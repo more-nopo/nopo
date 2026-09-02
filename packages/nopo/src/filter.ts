@@ -70,7 +70,7 @@ export interface FilterContext {
 
 /** Parse a --since argument that can be either a plain git ref or a JSON map of per-service
  * refs. Plain ref: `"abc123"` → `{ since: "abc123" }` JSON map:
- * `'{"backend":"abc","af-api":"def"}'` → `{ sinceMap: {...} }`
+ * `'{"backend":"abc","api":"def"}'` → `{ sinceMap: {...} }`
  */
 export function parseSinceArg(
   since: string | undefined,

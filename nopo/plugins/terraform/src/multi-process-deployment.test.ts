@@ -131,7 +131,7 @@ describe("deploymentName", () => {
 
   it("suffixes non-default processes with the process name", () => {
     expect(deploymentName("web", "worker")).toBe("web-worker");
-    expect(deploymentName("af-api", "scheduler")).toBe("af-api-scheduler");
+    expect(deploymentName("api", "scheduler")).toBe("api-scheduler");
   });
 });
 
@@ -269,7 +269,7 @@ describe("yamlDeployment — single-process back-compat", () => {
       port: 3000,
       preCommand: "bunx drizzle-kit migrate",
     });
-    const m = makeManifest("af-api", { default: procWithPre });
+    const m = makeManifest("api", { default: procWithPre });
     const yaml = yamlDeployment(m, "nopo-dev", {
       isDb: false,
       isNginx: false,
@@ -288,7 +288,7 @@ describe("yamlDeployment — single-process back-compat", () => {
           spec: {
             initContainers: [
               {
-                name: "af-api-pre",
+                name: "api-pre",
                 command: ["sh", "-c", "bunx drizzle-kit migrate"],
               },
             ],
@@ -327,7 +327,7 @@ describe("yamlDeployment — multi-process", () => {
       env: { ROLE: "worker" },
     }),
   };
-  const svc = makeManifest("af-api", processes);
+  const svc = makeManifest("api", processes);
 
   function deployDefault() {
     return parseYaml(
@@ -364,9 +364,9 @@ describe("yamlDeployment — multi-process", () => {
   }
 
   it("emits a Deployment per process with the right names", () => {
-    expect(deployDefault()).toMatchObject({ metadata: { name: "af-api" } });
+    expect(deployDefault()).toMatchObject({ metadata: { name: "api" } });
     expect(deployWorker()).toMatchObject({
-      metadata: { name: "af-api-worker" },
+      metadata: { name: "api-worker" },
     });
   });
 
@@ -374,21 +374,21 @@ describe("yamlDeployment — multi-process", () => {
     expect(deployDefault()).toMatchObject({
       spec: {
         selector: {
-          matchLabels: { app: "af-api" },
+          matchLabels: { app: "api" },
         },
         template: {
-          metadata: { labels: { app: "af-api", "nopo.process": "default" } },
+          metadata: { labels: { app: "api", "nopo.process": "default" } },
         },
       },
     });
     expect(deployWorker()).toMatchObject({
       spec: {
         selector: {
-          matchLabels: { app: "af-api-worker" },
+          matchLabels: { app: "api-worker" },
         },
         template: {
           metadata: {
-            labels: { app: "af-api-worker", "nopo.process": "worker" },
+            labels: { app: "api-worker", "nopo.process": "worker" },
           },
         },
       },
@@ -415,7 +415,7 @@ describe("yamlDeployment — multi-process", () => {
     // "no published port" which is correct.
     const w = deployWorker();
     expect(w).toMatchObject({
-      spec: { template: { spec: { containers: [{ name: "af-api-worker" }] } } },
+      spec: { template: { spec: { containers: [{ name: "api-worker" }] } } },
     });
     // assert the absence of `ports` on the container
     expect(JSON.stringify(w)).not.toMatch(/"ports":\[/);
@@ -463,8 +463,8 @@ describe("yamlDeployment — multi-process", () => {
     const wEnv = collectEnv(deployWorker());
 
     // Service-level env (SERVICE_NAME, NODE_ENV) is on both
-    expect(dEnv.SERVICE_NAME).toBe("af-api");
-    expect(wEnv.SERVICE_NAME).toBe("af-api");
+    expect(dEnv.SERVICE_NAME).toBe("api");
+    expect(wEnv.SERVICE_NAME).toBe("api");
 
     // Per-process env keys win
     expect(dEnv.ROLE).toBe("api");
@@ -480,7 +480,7 @@ describe("yamlDeployment — multi-process", () => {
       spec: {
         template: {
           spec: {
-            initContainers: [{ name: "af-api-pre" }],
+            initContainers: [{ name: "api-pre" }],
           },
         },
       },
@@ -652,14 +652,14 @@ describe("deploymentName — dep fan-out across all dep processes (Rule 3)", () 
   });
 
   it("three-process dep fans out to three Deployments with correct names", () => {
-    const depId = "af-api";
+    const depId = "api";
     const depProcesses: NormalizedProcess[] = [
       makeProcess({ name: "default" }),
       makeProcess({ name: "worker" }),
       makeProcess({ name: "cron" }),
     ];
     const waitTargets = depProcesses.map((p) => deploymentName(depId, p.name));
-    expect(waitTargets).toEqual(["af-api", "af-api-worker", "af-api-cron"]);
+    expect(waitTargets).toEqual(["api", "api-worker", "api-cron"]);
   });
 });
 
@@ -668,7 +668,7 @@ describe("yamlService — multi-process", () => {
     default: makeProcess({ port: 3000 }),
     worker: makeProcess({ name: "worker" }),
   };
-  const svc = makeManifest("af-api", processes);
+  const svc = makeManifest("api", processes);
 
   it("emits one Service for the port-bearing process, named after the service id (default)", () => {
     const yaml = yamlService(svc, "nopo-dev", {
@@ -680,8 +680,8 @@ describe("yamlService — multi-process", () => {
       port: 3000,
     });
     expect(parseYaml(yaml)).toMatchObject({
-      metadata: { name: "af-api" },
-      spec: { selector: { app: "af-api" } },
+      metadata: { name: "api" },
+      spec: { selector: { app: "api" } },
     });
   });
 
@@ -694,7 +694,7 @@ describe("yamlService — multi-process", () => {
       process: processes.default!,
       port: 3000,
     });
-    expect(parseYaml(yaml)).toMatchObject({ metadata: { name: "af-api" } });
+    expect(parseYaml(yaml)).toMatchObject({ metadata: { name: "api" } });
   });
 
   it("suffixes the Service name when the port-bearing process is non-default", () => {
@@ -720,7 +720,7 @@ describe("yamlService — multi-process", () => {
 // ---- NODE_EXTRA_CA_CERTS injection (Bun + in-cluster TLS) ----
 
 describe("yamlDeployment — NODE_EXTRA_CA_CERTS for in-cluster Bun", () => {
-  /** Production blocker: af-api's worker process uses @kubernetes/client-node, which calls
+  /** Production blocker: api's worker process uses @kubernetes/client-node, which calls
    * `kc.loadFromCluster()` and attaches an `https.Agent({ ca })` to the request context.
    */
 
@@ -748,7 +748,7 @@ describe("yamlDeployment — NODE_EXTRA_CA_CERTS for in-cluster Bun", () => {
   });
 
   it("injects NODE_EXTRA_CA_CERTS on every process of a multi-process service (web AND worker)", () => {
-    /** The af-api worker is the actual production blocker — it's the
+    /** The api worker is the actual production blocker — it's the
      * process that calls KubernetesProvider. The web process getting
      * the env var too is a no-op (it doesn't talk to the k8s API),
      * but pinning both keeps the rule simple: all Deployments get it.
@@ -764,7 +764,7 @@ describe("yamlDeployment — NODE_EXTRA_CA_CERTS for in-cluster Bun", () => {
         command: "bun run src/worker.ts",
       }),
     };
-    const svc = makeManifest("af-api", processes);
+    const svc = makeManifest("api", processes);
 
     const webYaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
@@ -827,7 +827,7 @@ describe("yamlDeployment — NODE_EXTRA_CA_CERTS for in-cluster Bun", () => {
 // ---- NOPO_NAMESPACE injection (downward API) ----
 
 describe("yamlDeployment — NOPO_NAMESPACE via downward API", () => {
-  /** Production blocker (#6998 follow-up): af-api's worker has no NOPO_NAMESPACE in its env, so
+  /** Production blocker (a prior deploy bug): api's worker has no NOPO_NAMESPACE in its env, so
    * KubernetesProvider falls through to the literal "default" namespace. It then tries to manage agent
    * pods in `default` instead of the actual deploy namespace (e.g. `nopo-prod`) and gets a 403 from the
    * API server.
@@ -862,7 +862,7 @@ describe("yamlDeployment — NOPO_NAMESPACE via downward API", () => {
   });
 
   it("injects NOPO_NAMESPACE on every process of a multi-process service (web AND worker)", () => {
-    /** The af-api worker is the actual production blocker — that's the
+    /** The api worker is the actual production blocker — that's the
      * process that calls KubernetesProvider. Both Deployments must carry
      * the env var: web for parity, worker because that's the spawn path.
      */
@@ -877,7 +877,7 @@ describe("yamlDeployment — NOPO_NAMESPACE via downward API", () => {
         command: "bun run src/worker.ts",
       }),
     };
-    const svc = makeManifest("af-api", processes);
+    const svc = makeManifest("api", processes);
 
     const webYaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
@@ -934,10 +934,10 @@ describe("yamlDeployment — serviceAccountName per process", () => {
       worker: makeProcess({
         name: "worker",
         command: "bun run src/worker.ts",
-        kubernetes: { serviceAccountName: "af-runner" },
+        kubernetes: { serviceAccountName: "runner" },
       }),
     };
-    const svc = makeManifest("af-api", processes);
+    const svc = makeManifest("api", processes);
     const yaml = yamlDeployment(svc, "nopo-prod", {
       isDb: false,
       isNginx: false,
@@ -954,7 +954,7 @@ describe("yamlDeployment — serviceAccountName per process", () => {
       spec: {
         template: {
           spec: {
-            serviceAccountName: "af-runner",
+            serviceAccountName: "runner",
           },
         },
       },

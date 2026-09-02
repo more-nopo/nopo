@@ -80,7 +80,7 @@ describe("buildSecretManifestsForServices — default runtime", () => {
     const manifests = await buildSecretManifestsForServices(
       [
         {
-          id: "af-api",
+          id: "api",
           overlay: makeRuntime("default", { API_KEY: ciphertext }),
         },
       ],
@@ -90,14 +90,14 @@ describe("buildSecretManifestsForServices — default runtime", () => {
 
     expect(manifests).toHaveLength(1);
     const m = manifests[0]!;
-    expect(m.serviceId).toBe("af-api");
-    expect(m.secretName).toBe("af-api-secrets");
+    expect(m.serviceId).toBe("api");
+    expect(m.secretName).toBe("api-secrets");
 
     const doc = parseYaml(m.yaml);
     expect(doc.kind).toBe("Secret");
-    expect(doc.metadata.name).toBe("af-api-secrets");
+    expect(doc.metadata.name).toBe("api-secrets");
     expect(doc.metadata.namespace).toBe("nopo-test");
-    expect(doc.metadata.labels.app).toBe("af-api");
+    expect(doc.metadata.labels.app).toBe("api");
     expect(decodeData(doc.data)).toEqual({ API_KEY: "super-sekret" });
   });
 
@@ -164,7 +164,7 @@ describe("buildSecretManifestsForServices — default → named override", () =>
     });
 
     const manifests = await buildSecretManifestsForServices(
-      [{ id: "af-api", overlay }],
+      [{ id: "api", overlay }],
       "nopo-prod",
       async () => identity,
     );
@@ -184,7 +184,7 @@ describe("buildSecretManifestsForServices — default → named override", () =>
 
     const overlay = makeRuntime("default", { API_KEY: defaultApi });
     const manifests = await buildSecretManifestsForServices(
-      [{ id: "af-api", overlay }],
+      [{ id: "api", overlay }],
       "nopo-dev",
       async () => identity,
     );
@@ -209,14 +209,14 @@ describe("buildSecretManifestsForServices — failure paths", () => {
       buildSecretManifestsForServices(
         [
           {
-            id: "af-api",
+            id: "api",
             overlay: makeRuntime("default", { BROKER_KEK: wrongCiphertext }),
           },
         ],
         "nopo-test",
         async () => identity,
       ),
-    ).rejects.toThrow(/BROKER_KEK.*af-api.*default/);
+    ).rejects.toThrow(/BROKER_KEK.*api.*default/);
   });
 
   it("rejects a non-envelope value with an actionable error", async () => {
@@ -224,7 +224,7 @@ describe("buildSecretManifestsForServices — failure paths", () => {
       buildSecretManifestsForServices(
         [
           {
-            id: "af-api",
+            id: "api",
             overlay: makeRuntime("default", {
               BROKER_KEK: "this-is-not-an-envelope",
             }),
@@ -233,7 +233,7 @@ describe("buildSecretManifestsForServices — failure paths", () => {
         "nopo-test",
         async () => "AGE-SECRET-KEY-UNUSED",
       ),
-    ).rejects.toThrow(/af-api.*BROKER_KEK.*ENC\[/);
+    ).rejects.toThrow(/api.*BROKER_KEK.*ENC\[/);
   });
 
   it("propagates a loadIdentity failure unchanged", async () => {
@@ -263,7 +263,7 @@ describe("redactSecretManifest", () => {
     const [m] = await buildSecretManifestsForServices(
       [
         {
-          id: "af-api",
+          id: "api",
           overlay: makeRuntime("default", { K1: c1, K2: c2 }),
         },
       ],
@@ -274,7 +274,7 @@ describe("redactSecretManifest", () => {
     const redacted = redactSecretManifest(m!.yaml);
     const doc = parseYaml(redacted);
     expect(doc.kind).toBe("Secret");
-    expect(doc.metadata.name).toBe("af-api-secrets");
+    expect(doc.metadata.name).toBe("api-secrets");
     // The decrypt path emits `data:` (base64). redactSecretManifest
     // overwrites every `data[k]` with the literal "[REDACTED]" too.
     const map = doc.data ?? doc.stringData ?? {};

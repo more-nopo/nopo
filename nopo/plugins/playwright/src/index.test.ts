@@ -95,13 +95,13 @@ describe("resolveUrl", () => {
 
 describe("resolveTestDir", () => {
   it("uses config testDir when provided", () => {
-    const result = resolveTestDir("/project/af-web", { testDir: "e2e-tests" });
-    expect(result).toBe("/project/af-web/e2e-tests");
+    const result = resolveTestDir("/project/web", { testDir: "e2e-tests" });
+    expect(result).toBe("/project/web/e2e-tests");
   });
 
   it("defaults to playwright directory", () => {
-    const result = resolveTestDir("/project/af-web", {});
-    expect(result).toBe("/project/af-web/playwright");
+    const result = resolveTestDir("/project/web", {});
+    expect(result).toBe("/project/web/playwright");
   });
 });
 

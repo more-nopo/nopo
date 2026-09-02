@@ -1,6 +1,6 @@
-/** THE BUG: `nopo makemigrations af-api` exited 0 having run nothing. af-api declares the
+/** THE BUG: `nopo makemigrations api` exited 0 having run nothing. api declares the
  * command nested under a `db:` parent (`db:makemigrations`), but
- * `CommandScript.targetFilter` only matched TOP-LEVEL command keys, so af-api was dropped
+ * `CommandScript.targetFilter` only matched TOP-LEVEL command keys, so api was dropped
  * from the resolved target set. The only guard was
  */
 import fs from "node:fs";
@@ -22,8 +22,8 @@ import {
 import main from "../../src/index.ts";
 import { MockExitError, mockIO } from "../../src/test-utils/mock-io.ts";
 
-// Throwaway project mirroring the real shape that triggered the bug: `afapi` nests
-// makemigrations under `db:` (af-api) `backend` declares it top-level (Django backend)
+// Throwaway project mirroring the real shape that triggered the bug: `svc` nests
+// makemigrations under `db:` (api) `backend` declares it top-level (Django backend)
 const ROOT_CONFIG = `
 name: empty-dispatch-fixture
 
@@ -33,21 +33,21 @@ services:
 `;
 
 const SERVICES: Record<string, string> = {
-  afapi: `
-name: afapi
+  svc: `
+name: svc
 build:
-  command: echo "build afapi"
+  command: echo "build svc"
 commands:
   db:
     commands:
-      migrate: echo "AFAPI_MIGRATE"
-      makemigrations: echo "AFAPI_MAKEMIGRATIONS"
+      migrate: echo "SVC_MIGRATE"
+      makemigrations: echo "SVC_MAKEMIGRATIONS"
   check:
     commands:
-      lint: echo "AFAPI_CHECK_LINT"
+      lint: echo "SVC_CHECK_LINT"
   fix:
     commands:
-      lint: echo "AFAPI_FIX_LINT"
+      lint: echo "SVC_FIX_LINT"
 `,
   backend: `
 name: backend
@@ -118,7 +118,7 @@ describe("resolveServiceCommandPath", () => {
     // `makemigrations` is reachable only at `db:makemigrations` on this service. It used to
     // resolve via a bare-name fallback; that fallback is gone, so the bare form no longer
     const { path: resolved, candidates } = resolveServiceCommandPath(
-      serviceOf(project, "afapi"),
+      serviceOf(project, "svc"),
       "makemigrations",
     );
     expect(resolved).toBeNull();
@@ -129,7 +129,7 @@ describe("resolveServiceCommandPath", () => {
     const project = loadFixtureProject();
     expect(
       resolveServiceCommandPath(
-        serviceOf(project, "afapi"),
+        serviceOf(project, "svc"),
         "db:makemigrations",
       ).path,
     ).toBe("db:makemigrations");
@@ -140,7 +140,7 @@ describe("resolveServiceCommandPath", () => {
     // arbitrate any more — a bare name simply never reaches a subcommand.
     const project = loadFixtureProject();
     const { path: resolved, candidates } = resolveServiceCommandPath(
-      serviceOf(project, "afapi"),
+      serviceOf(project, "svc"),
       "lint",
     );
     expect(resolved).toBeNull();
@@ -163,7 +163,7 @@ describe("resolveServiceCommandPath", () => {
     // must NOT make `nope:makemigrations` resolve.
     expect(
       resolveServiceCommandPath(
-        serviceOf(project, "afapi"),
+        serviceOf(project, "svc"),
         "nope:makemigrations",
       ).path,
     ).toBeNull();
@@ -173,7 +173,7 @@ describe("resolveServiceCommandPath", () => {
 describe("listCommandPaths", () => {
   it("emits parents alongside every nested path", () => {
     const project = loadFixtureProject();
-    expect(listCommandPaths(serviceOf(project, "afapi"))).toEqual([
+    expect(listCommandPaths(serviceOf(project, "svc"))).toEqual([
       "db",
       "db:migrate",
       "db:makemigrations",
@@ -189,34 +189,34 @@ describe("buildExecutionPlan via a resolved nested path", () => {
   it("produces a non-empty stage for a colon-addressed target (regression: was 0 stages)", () => {
     const project = loadFixtureProject();
     const resolved = resolveServiceCommandPath(
-      serviceOf(project, "afapi"),
+      serviceOf(project, "svc"),
       "db:makemigrations",
     ).path;
     expect(resolved).not.toBeNull();
 
-    const { stages } = buildExecutionPlan(project, resolved!, ["afapi"]);
+    const { stages } = buildExecutionPlan(project, resolved!, ["svc"]);
     const tasks = stages.flat();
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
-      service: "afapi",
+      service: "svc",
       command: "db:makemigrations",
-      executable: 'echo "AFAPI_MAKEMIGRATIONS"',
+      executable: 'echo "SVC_MAKEMIGRATIONS"',
     });
   });
 
   it("fans one bare name across targets that resolve it differently", () => {
-    // The mixed case: `makemigrations` is nested on afapi and top-level on backend. Both must
+    // The mixed case: `makemigrations` is nested on svc and top-level on backend. Both must
     // land in ONE plan, each with its own resolved path — this is why buildExecutionPlan takes
     const project = loadFixtureProject();
     const commandPaths = new Map([
-      ["afapi", "db:makemigrations"],
+      ["svc", "db:makemigrations"],
       ["backend", "makemigrations"],
     ]);
 
     const { stages } = buildExecutionPlan(
       project,
       "makemigrations",
-      ["afapi", "backend"],
+      ["svc", "backend"],
       commandPaths,
     );
     const tasks = stages.flat();
@@ -224,7 +224,7 @@ describe("buildExecutionPlan via a resolved nested path", () => {
       tasks
         .map((t) => `${t.service}:${t.command}`)
         .sort((a, b) => (a < b ? -1 : 1)),
-    ).toEqual(["afapi:db:makemigrations", "backend:makemigrations"]);
+    ).toEqual(["backend:makemigrations", "svc:db:makemigrations"]);
   });
 
   it("emits a dependency shared by differently-resolved targets exactly once", () => {
@@ -317,23 +317,23 @@ describe("assertCommandDispatches", () => {
       assertCommandDispatches({
         ...base(project),
         commandName: "db:makemigrations",
-        explicitTargets: ["afapi"],
+        explicitTargets: ["svc"],
       }),
     ).not.toThrow();
   });
 
   it("points a bare nested name at its colon path instead of just failing", () => {
     // Dropping the fallback is only safe if the error teaches the replacement — otherwise
-    // `nopo makemigrations af-api` becomes a dead end and people go back to running
+    // `nopo makemigrations api` becomes a dead end and people go back to running
     const project = loadFixtureProject();
     expect(() =>
       assertCommandDispatches({
         ...base(project),
-        explicitTargets: ["afapi"],
+        explicitTargets: ["svc"],
         stageCount: 0,
       }),
     ).toThrow(
-      /nested at db:makemigrations.*colon.*'nopo db:makemigrations afapi'/s,
+      /nested at db:makemigrations.*colon.*'nopo db:makemigrations svc'/s,
     );
   });
 
@@ -354,7 +354,7 @@ describe("assertCommandDispatches", () => {
       assertCommandDispatches({
         ...base(project),
         commandName: "nope",
-        explicitTargets: ["afapi"],
+        explicitTargets: ["svc"],
         stageCount: 0,
       }),
     ).toThrow(/Available commands: db, db:migrate, db:makemigrations/);
@@ -366,7 +366,7 @@ describe("assertCommandDispatches", () => {
       assertCommandDispatches({
         ...base(project),
         commandName: "lint",
-        explicitTargets: ["afapi"],
+        explicitTargets: ["svc"],
         stageCount: 0,
       }),
     ).toThrow(/nested at check:lint, fix:lint/s);
@@ -435,14 +435,14 @@ describe("nopo <command> <target> (CLI)", () => {
   it("dispatches a named target whose command is nested (exit clean)", async () => {
     // The guard now rejects any zero-stage plan, so a clean exit here PROVES the dispatch was
     // non-empty.
-    const io = await runCliInFixture(["db:makemigrations", "afapi"]);
+    const io = await runCliInFixture(["db:makemigrations", "svc"]);
     expect(io.exitCode).toBeNull();
   });
 
   it("keeps the named target in the resolved plan", async () => {
     const io = await runCliInFixture([
       "db:makemigrations",
-      "afapi",
+      "svc",
       "--print",
       "--json",
     ]);
@@ -451,14 +451,14 @@ describe("nopo <command> <target> (CLI)", () => {
       services: string[];
       finalTargets: string[];
     };
-    // Pre-fix both of these were `[]` — af-api was filtered out before
+    // Pre-fix both of these were `[]` — api was filtered out before
     // the plan was ever built.
-    expect(plan.services).toEqual(["afapi"]);
-    expect(plan.finalTargets).toEqual(["afapi"]);
+    expect(plan.services).toEqual(["svc"]);
+    expect(plan.finalTargets).toEqual(["svc"]);
   });
 
   it("fans a bare name to TOP-LEVEL implementors only", async () => {
-    // `backend` declares makemigrations top-level, `afapi` nests it under `db:`. With no
+    // `backend` declares makemigrations top-level, `svc` nests it under `db:`. With no
     // positional target this must resolve backend ONLY. The predecessor of this row asserted
     const io = await runCliInFixture(["makemigrations", "--print", "--json"]);
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- runtime parse of the documented --print --json shape
@@ -473,7 +473,7 @@ describe("nopo <command> <target> (CLI)", () => {
   });
 
   it("exits NON-ZERO when a bare name only exists nested", async () => {
-    const io = await runCliInFixture(["lint", "afapi"]);
+    const io = await runCliInFixture(["lint", "svc"]);
     expect(io.exitCode).toBe(1);
   });
 
@@ -482,7 +482,7 @@ describe("nopo <command> <target> (CLI)", () => {
     // fed ambiguous targets to `buildExecutionPlan`, which fell back to the raw user-typed
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
-      const io = await runCliInFixture(["lint", "afapi"]);
+      const io = await runCliInFixture(["lint", "svc"]);
       expect(io.exitCode).toBe(1);
       const output = spy.mock.calls.flat().join("\n");
       expect(output).toContain("nested at");

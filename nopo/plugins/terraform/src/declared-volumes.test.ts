@@ -242,7 +242,7 @@ describe("yamlDeployment — runtime.volumes integration", () => {
     // Preview ResourceQuota is 3 CPU — RollingUpdate create-before-delete
     // deadlocks when prior pods still hold default-sized requests.
     const proc = makeProcess({ command: "bun run src/index.ts", port: 3001 });
-    const m = makeManifest("af-api", { default: proc });
+    const m = makeManifest("api", { default: proc });
     const yaml = yamlDeployment(m, "nopo-prev", {
       isDb: false,
       isNginx: false,

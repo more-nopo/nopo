@@ -101,7 +101,7 @@ export function renderSerializedPlanDag(
 }
 
 /** One-line summary used in place of the full DAG render when the plan has 0 or 1 nodes.
- * Form: Plan: 1 node — build:exec af-api Public so {@link renderPlanDag} and `--print`
+ * Form: Plan: 1 node — build:exec api Public so {@link renderPlanDag} and `--print`
  * callers share the same trivial output regardless of which entry point they use.
  */
 export function renderTrivialSummary(plan: Plan): string {

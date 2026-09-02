@@ -45,17 +45,17 @@ function svc(
 }
 
 describe("dependency-graph systemDeps semantics", () => {
-  // Setup mirrors the real-world shape the bug exposed: af-nginx is a service, nopo + root
+  // Setup mirrors the real-world shape the bug exposed: nginx is a service, nopo + root
   // are project-level system deps that other services inherit but are NOT runnable
   const entries: Record<string, NormalizedService> = {
     nopo: svc("nopo"),
     root: svc("root"),
     db: svc("db"),
-    "af-nginx": svc("af-nginx", {
-      runtimeDeps: ["af-api"],
+    "nginx": svc("nginx", {
+      runtimeDeps: ["api"],
       systemDeps: ["nopo", "root"],
     }),
-    "af-api": svc("af-api", {
+    "api": svc("api", {
       runtimeDeps: ["db"],
       systemDeps: ["nopo", "root"],
     }),
@@ -63,17 +63,17 @@ describe("dependency-graph systemDeps semantics", () => {
   const all = Object.keys(entries);
 
   it("withDependencies (forward walk: 'what do I need?') ignores systemDeps", () => {
-    // af-nginx needs af-api, which needs db. nopo + root are NOT
-    // required to start af-nginx — they're discovery-only edges.
-    const result = withDependencies(["af-nginx"], entries, all);
-    expect(result.sort()).toEqual(["af-api", "af-nginx", "db"]);
+    // nginx needs api, which needs db. nopo + root are NOT
+    // required to start nginx — they're discovery-only edges.
+    const result = withDependencies(["nginx"], entries, all);
+    expect(result.sort()).toEqual(["api", "db", "nginx"]);
     expect(result).not.toContain("nopo");
     expect(result).not.toContain("root");
   });
 
   it("withTransitiveDependencies forward walk also ignores systemDeps", () => {
-    const result = withTransitiveDependencies(["af-nginx"], entries, all);
-    expect(result.sort()).toEqual(["af-api", "af-nginx", "db"]);
+    const result = withTransitiveDependencies(["nginx"], entries, all);
+    expect(result.sort()).toEqual(["api", "db", "nginx"]);
     expect(result).not.toContain("nopo");
     expect(result).not.toContain("root");
   });
@@ -82,20 +82,20 @@ describe("dependency-graph systemDeps semantics", () => {
     // A change to nopo affects every service that lists it as a system dep. This is the whole
     // point of the field — change-detection discovery (`--changed --with-dependants`).
     const result = withDependants(["nopo"], entries, all);
-    expect(result.sort()).toEqual(["af-api", "af-nginx", "nopo"]);
+    expect(result.sort()).toEqual(["api", "nginx", "nopo"]);
   });
 
   it("withDependants cascades through systemDeps even when the dep is not a runtime/build dep anywhere", () => {
     // Without systemDeps it would have zero dependants. With systemDeps wired into the reverse
     // walk, every consumer surfaces.
     const result = withDependants(["root"], entries, all);
-    expect(result.sort()).toEqual(["af-api", "af-nginx", "root"]);
+    expect(result.sort()).toEqual(["api", "nginx", "root"]);
   });
 
   it("withDependants on a regular service walks normal runtime/build edges transitively", () => {
-    // The reverse walk should reach af-nginx via that chain regardless of systemDeps wiring.
+    // The reverse walk should reach nginx via that chain regardless of systemDeps wiring.
     const result = withDependants(["db"], entries, all);
-    expect(result.sort()).toEqual(["af-api", "af-nginx", "db"]);
+    expect(result.sort()).toEqual(["api", "db", "nginx"]);
   });
 
   it("withDependants does NOT cascade through root when root is not a systemDep", () => {
@@ -105,11 +105,11 @@ describe("dependency-graph systemDeps semantics", () => {
       nopo: svc("nopo"),
       root: svc("root"),
       db: svc("db"),
-      "af-nginx": svc("af-nginx", {
-        runtimeDeps: ["af-api"],
+      "nginx": svc("nginx", {
+        runtimeDeps: ["api"],
         systemDeps: ["nopo"],
       }),
-      "af-api": svc("af-api", {
+      "api": svc("api", {
         runtimeDeps: ["db"],
         systemDeps: ["nopo"],
       }),

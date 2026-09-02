@@ -10,7 +10,7 @@ import { yamlPodDisruptionBudget } from "./index.ts";
 
 describe("yamlPodDisruptionBudget", () => {
   it("emits maxUnavailable: 1 with a selector matching the Deployment's app label", () => {
-    const yaml = yamlPodDisruptionBudget("af-api-web", "nopo-prod", 2);
+    const yaml = yamlPodDisruptionBudget("api-web", "nopo-prod", 2);
     expect(yaml).not.toBeNull();
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- yaml parse returns unknown
     const doc = parse(yaml!) as Record<string, unknown>;
@@ -19,13 +19,13 @@ describe("yamlPodDisruptionBudget", () => {
       apiVersion: "policy/v1",
       kind: "PodDisruptionBudget",
       metadata: {
-        name: "af-api-web",
+        name: "api-web",
         namespace: "nopo-prod",
         labels: { "app.kubernetes.io/managed-by": "nopo" },
       },
       spec: {
         maxUnavailable: 1,
-        selector: { matchLabels: { app: "af-api-web" } },
+        selector: { matchLabels: { app: "api-web" } },
       },
     });
   });

@@ -1186,7 +1186,7 @@ class DockerBuilder {
     }
 
     /** LAST, deliberately. /build-info.json changes on every commit; as the
-     * final layer it invalidates ~4 KB instead of the entire build. af-web
+     * final layer it invalidates ~4 KB instead of the entire build. web
      * reads it at runtime (app/lib/build-info.server.ts), so the image must
      * still carry it.
      */
@@ -1515,7 +1515,7 @@ class DockerBuilder {
 }
 
 /** Output config for a target whose image gets pushed. BuildKit's default registry export gzips each
- * layer on one goroutine. On a release build of af-api, `exporting to image` took 141.6s of a 463s
+ * layer on one goroutine. On a release build of api, `exporting to image` took 141.6s of a 463s
  * bake — and only 6.5s of that was `pushing layers`. The other 134.6s was local compression.
  */
 export function pushImageOutput(): string {
@@ -1680,7 +1680,7 @@ export function generatePackageManagerInstalls(
         : `$\${APP}/${rel.split(path.sep).join("/")}`;
     /** Drop the PM's download cache in the SAME layer as the install, so it never lands in a layer at all.
      * It is throwaway in an image and the copy/export path is inode-bound: measured 146,775 dirents, 47%
-     * of af-api's install layer. bun hardlinks cache->node_modules, so no bytes are lost.
+     * of api's install layer. bun hardlinks cache->node_modules, so no bytes are lost.
      */
     lines.push(
       `RUN cd ${containerCwd} && ${command}${installCacheCleanup(pm)}`,
@@ -1691,7 +1691,7 @@ export function generatePackageManagerInstalls(
 
 /** Emit the `prod` install — the tree the runtime stage copies. The build stage installs what COMPILES
  * the service. The runtime image needs only what RUNS it, but today it copies the build stage's tree
- * wholesale. For af-api that is 1.6 GB across ~140k files, and both the runtime COPY (89.2s) and the
+ * wholesale. For api that is 1.6 GB across ~140k files, and both the runtime COPY (89.2s) and the
  * layer export are bound by that file count. Runs after the build command, so the build still saw its
  */
 export function generateRuntimeInstallLines(

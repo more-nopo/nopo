@@ -67,7 +67,7 @@ describe("optsIntoPreview — product-plane opt-in filter", () => {
     expect(optsIntoPreview(svc(["default", "preview", "prod"]))).toBe(true);
   });
 
-  it("excludes platform services with no preview overlay (db/litellm/otel)", () => {
+  it("excludes platform services with no preview overlay (db/llm-proxy/otel)", () => {
     expect(optsIntoPreview(svc(["default", "prod"]))).toBe(false);
   });
 

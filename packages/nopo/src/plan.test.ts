@@ -215,7 +215,7 @@ describe("serializePlan / deserializePlan", () => {
   });
 
   it("preserves insertion order through round-trip", () => {
-    const ids = ["env", "build:af-api", "cmd:lint:web", "deploy"];
+    const ids = ["env", "build:api", "cmd:lint:web", "deploy"];
     const plan = planFromNodes(ids.map((id) => pluginNode(id)));
     const back = deserializePlan(serializePlan(plan));
     expect([...back.nodes.keys()]).toEqual(ids);

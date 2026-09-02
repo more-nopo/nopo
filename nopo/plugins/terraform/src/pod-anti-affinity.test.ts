@@ -97,7 +97,7 @@ function render(id: string, proc: NormalizedProcess): string {
 describe("yamlDeployment — soft pod anti-affinity", () => {
   it("spreads replicas across hostnames with a weight-100 preferred rule", () => {
     const yaml = render(
-      "af-api",
+      "api",
       makeProcess({ name: "web", port: 3000, minInstances: 2 }),
     );
     const rules =
@@ -109,7 +109,7 @@ describe("yamlDeployment — soft pod anti-affinity", () => {
       weight: 100,
       podAffinityTerm: {
         topologyKey: "kubernetes.io/hostname",
-        labelSelector: { matchLabels: { app: "af-api-web" } },
+        labelSelector: { matchLabels: { app: "api-web" } },
       },
     });
   });

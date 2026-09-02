@@ -1346,7 +1346,7 @@ export class Runner {
     }
 
     // CommandScript-specific validation: refuse to dispatch NOTHING. This guard used to ask
-    // "is the command defined on ANY service?", which let `nopo makemigrations af-api` exit 0
+    // "is the command defined on ANY service?", which let `nopo makemigrations api` exit 0
     if (ScriptToRun.name === "") {
       const commandName = runnerForScript.argv[0];
       if (commandName) {

@@ -235,8 +235,8 @@ async function parseGenerated(
 describe("generateComposeFile", () => {
   it("generates a basic service with runtime config", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           dev: "bun run --hot src/index.ts",
@@ -251,13 +251,13 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
     const envVars = getEnvVars(svc);
 
     // Dev mode + dev overlay declared → uses base image with bind-mount.
     expect(svc.image).toBe("example/app:local");
     expect(svc.pull_policy).toBe("never");
-    expect(envVars.SERVICE_NAME).toBe("af-api");
+    expect(envVars.SERVICE_NAME).toBe("api");
     expect(envVars.PORT).toBe("3001");
     expect(envVars.DATABASE_URL).toBe("postgres://nopo:nopo@db:5432/nopo");
     // Dev mode: should use dev command
@@ -274,8 +274,8 @@ describe("generateComposeFile", () => {
 
   it("uses production command when DOCKER_TARGET is production", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           dev: "bun run --hot src/index.ts",
@@ -289,7 +289,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services, { DOCKER_TARGET: "production" });
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
 
     expect(svc.command).toBe("bun run src/index.ts");
   });
@@ -373,8 +373,8 @@ describe("generateComposeFile", () => {
           },
         },
       }),
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           dev: "bun run --hot src/index.ts",
@@ -389,7 +389,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
 
     expect(svc.depends_on).toEqual({
       db: { condition: "service_healthy" },
@@ -424,8 +424,8 @@ describe("generateComposeFile", () => {
           },
         },
       }),
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           dev: "bun run --hot src/index.ts",
@@ -442,7 +442,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
 
     expect(svc.depends_on).toEqual({
       db: { condition: "service_healthy" },
@@ -458,8 +458,8 @@ describe("generateComposeFile", () => {
         type: "package",
         build: { command: "bunx tsc", deps: [] },
       }),
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -474,7 +474,7 @@ describe("generateComposeFile", () => {
     const parsed = await parseGenerated(runner);
     const serviceNames = getServiceNames(parsed);
 
-    expect(serviceNames).toContain("af-api");
+    expect(serviceNames).toContain("api");
     expect(serviceNames).toContain("base"); // base utility service in dev
     expect(serviceNames).not.toContain("configs");
   });
@@ -491,8 +491,8 @@ describe("generateComposeFile", () => {
           deps: [],
         },
       }),
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -502,34 +502,34 @@ describe("generateComposeFile", () => {
         },
         runtimeDeps: ["db"],
       }),
-      "af-web": makeService({
-        id: "af-web",
+      "web": makeService({
+        id: "web",
         runtime: {
           command: "bunx react-router-serve",
           cpu: "0.5",
           memory: "256Mi",
           port: 3000,
-          deps: ["af-api"],
+          deps: ["api"],
         },
-        runtimeDeps: ["af-api"],
+        runtimeDeps: ["api"],
       }),
     };
 
-    // Resolved targets only include af-api and db (not af-web)
-    const runner = makeRunner(services, {}, ["af-api", "db"]);
+    // Resolved targets only include api and db (not web)
+    const runner = makeRunner(services, {}, ["api", "db"]);
     const parsed = await parseGenerated(runner);
     const serviceNames = getServiceNames(parsed);
 
-    expect(serviceNames).toContain("af-api");
+    expect(serviceNames).toContain("api");
     expect(serviceNames).toContain("db");
     expect(serviceNames).toContain("base"); // base is always added in dev
-    expect(serviceNames).not.toContain("af-web");
+    expect(serviceNames).not.toContain("web");
   });
 
   it("includes the base utility service in development mode", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -552,8 +552,8 @@ describe("generateComposeFile", () => {
 
   it("does not include base service in production mode", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -573,8 +573,8 @@ describe("generateComposeFile", () => {
 
   it("passes through secrets as env var references", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         secrets: [{ name: "ANTHROPIC_API_KEY" }, { name: "OPENAI_API_KEY" }],
         runtime: {
           command: "bun run src/index.ts",
@@ -588,7 +588,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
     const envVars = getEnvVars(svc);
 
     expect(envVars.ANTHROPIC_API_KEY).toBe("${ANTHROPIC_API_KEY:-}");
@@ -597,8 +597,8 @@ describe("generateComposeFile", () => {
 
   it("uses the declared test value as the shell default for secrets", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         secrets: [
           {
             name: "DATABASE_URL",
@@ -621,7 +621,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
     const envVars = getEnvVars(svc);
 
     expect(envVars.DATABASE_URL).toBe(
@@ -634,8 +634,8 @@ describe("generateComposeFile", () => {
 
   it("adds custom ports from plugin config", async () => {
     const services = {
-      "af-nginx": makeService({
-        id: "af-nginx",
+      "nginx": makeService({
+        id: "nginx",
         runtime: {
           cpu: "0.25",
           memory: "64Mi",
@@ -652,7 +652,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-nginx");
+    const svc = getService(parsed, "nginx");
 
     expect(svc.ports).toEqual(["${AF_PORT:-8080}:80"]);
   });
@@ -719,8 +719,8 @@ describe("generateComposeFile", () => {
 
   it("includes default network configuration", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -744,8 +744,8 @@ describe("generateComposeFile", () => {
 
   it("adds header comment to generated output", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -765,11 +765,11 @@ describe("generateComposeFile", () => {
   });
 
   it("emits one compose entry per process for a multi-process service", async () => {
-    // af-api style: processes.web (port 3001) + processes.worker (no port).
-    // Expect compose services `af-api-web` and `af-api-worker`.
+    // api style: processes.web (port 3001) + processes.worker (no port).
+    // Expect compose services `api-web` and `api-worker`.
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           cpu: "1",
           memory: "512Mi",
@@ -830,16 +830,16 @@ describe("generateComposeFile", () => {
     const parsed = await parseGenerated(runner);
     const serviceNames = getServiceNames(parsed);
 
-    // Both processes should be emitted — no bare `af-api`
-    expect(serviceNames).toContain("af-api-web");
-    expect(serviceNames).toContain("af-api-worker");
-    expect(serviceNames).not.toContain("af-api");
+    // Both processes should be emitted — no bare `api`
+    expect(serviceNames).toContain("api-web");
+    expect(serviceNames).toContain("api-worker");
+    expect(serviceNames).not.toContain("api");
   });
 
   it("routes the web process command and port correctly", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           cpu: "1",
           memory: "512Mi",
@@ -876,8 +876,8 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const webSvc = getService(parsed, "af-api-web");
-    const workerSvc = getService(parsed, "af-api-worker");
+    const webSvc = getService(parsed, "api-web");
+    const workerSvc = getService(parsed, "api-worker");
     const webEnv = getEnvVars(webSvc);
     const workerEnv = getEnvVars(workerSvc);
 
@@ -909,8 +909,8 @@ describe("generateComposeFile", () => {
   it("applies per-process plugin environment overrides", async () => {
     // Simulate plugins.docker-compose.processes.web.environment in nopo.yml
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           cpu: "1",
           memory: "512Mi",
@@ -957,8 +957,8 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const webEnv = getEnvVars(getService(parsed, "af-api-web"));
-    const workerEnv = getEnvVars(getService(parsed, "af-api-worker"));
+    const webEnv = getEnvVars(getService(parsed, "api-web"));
+    const workerEnv = getEnvVars(getService(parsed, "api-worker"));
 
     // web process gets BETTER_AUTH_URL
     expect(webEnv.BETTER_AUTH_URL).toBe("http://localhost:8080");
@@ -969,8 +969,8 @@ describe("generateComposeFile", () => {
   it("single-process services remain zero-diff (default process → bare service id)", async () => {
     // Ensure single-process services still emit under their original id
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           dev: "bun run --hot src/index.ts",
@@ -987,10 +987,10 @@ describe("generateComposeFile", () => {
     const serviceNames = getServiceNames(parsed);
 
     // Single-process services keep the bare id
-    expect(serviceNames).toContain("af-api");
-    expect(serviceNames).not.toContain("af-api-default");
+    expect(serviceNames).toContain("api");
+    expect(serviceNames).not.toContain("api-default");
     // And still have the right command (dev mode)
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
     expect(svc.command).toBe("bun run --hot src/index.ts");
   });
 
@@ -1000,8 +1000,8 @@ describe("generateComposeFile", () => {
      * rather than hitting `TypeError: {} is not iterable` at runtime.
      */
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -1020,7 +1020,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     await expect(parseGenerated(runner)).rejects.toThrow(
-      /plugins\.docker-compose\.volumes for service "af-api" must be a flat list/,
+      /plugins\.docker-compose\.volumes for service "api" must be a flat list/,
     );
   });
 
@@ -1030,8 +1030,8 @@ describe("generateComposeFile", () => {
      * block: exec -> test: ["CMD", ...] delay -> start_period
      */
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -1061,7 +1061,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
 
     expect(svc.healthcheck).toEqual({
       test: ["CMD", "curl", "-f", "http://localhost:3001/health/readiness"],
@@ -1074,8 +1074,8 @@ describe("generateComposeFile", () => {
 
   it("emits a deprecation warning when plugins.docker-compose.healthcheck is used (no runtime.healthcheck override)", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -1100,7 +1100,7 @@ describe("generateComposeFile", () => {
     const writes: string[] = [];
     const runner = makeRunner(services, {}, null, writes);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
     // Legacy compose block still produces a working healthcheck so
     // existing services keep deploying while migrations land.
     expect(svc.healthcheck).toEqual({
@@ -1113,7 +1113,7 @@ describe("generateComposeFile", () => {
 
     const warning = writes.join("");
     expect(warning).toMatch(/deprecation/);
-    expect(warning).toMatch(/af-api/);
+    expect(warning).toMatch(/api/);
     expect(warning).toMatch(/runtime\.<env>\.healthcheck:/);
   });
 
@@ -1121,8 +1121,8 @@ describe("generateComposeFile", () => {
     // Both shapes declared: the unified shape wins, the legacy stays
     // accessible only for services that haven't migrated yet.
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -1163,7 +1163,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-api");
+    const svc = getService(parsed, "api");
 
     expect(svc.healthcheck).toEqual({
       test: ["CMD", "curl", "-f", "http://localhost:3001/new"],
@@ -1174,7 +1174,7 @@ describe("generateComposeFile", () => {
     });
   });
 
-  /** For images without curl/wget (e.g. litellm's upstream python:slim) the `type: http` healthcheck
+  /** For images without curl/wget (e.g. llm-proxy's upstream python:slim) the `type: http` healthcheck
    * bind-mounts a vendored static curl at /.probe and emits `test: ["CMD", "/.probe", "-fsS",
    * "--max-time", "<t>", "<url>"]`. Caller-side fallback: when `port` is omitted, the URL takes the
    * runtime's `process.port`.
@@ -1182,8 +1182,8 @@ describe("generateComposeFile", () => {
 
   it("translates runtime.healthcheck (type: http) into the compose healthcheck + bind-mount", async () => {
     const services = {
-      litellm: makeService({
-        id: "litellm",
+      "llm-proxy": makeService({
+        id: "llm-proxy",
         image: "ghcr.io/berriai/litellm:v1.83.14-stable",
         runtime: {
           cpu: "0.5",
@@ -1213,7 +1213,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "litellm");
+    const svc = getService(parsed, "llm-proxy");
 
     expect(svc.healthcheck).toEqual({
       test: [
@@ -1242,8 +1242,8 @@ describe("generateComposeFile", () => {
 
   it("type: http falls back to the runtime port when `port` is omitted", async () => {
     const services = {
-      litellm: makeService({
-        id: "litellm",
+      "llm-proxy": makeService({
+        id: "llm-proxy",
         image: "ghcr.io/berriai/litellm:v1.83.14-stable",
         runtime: {
           cpu: "0.5",
@@ -1273,7 +1273,7 @@ describe("generateComposeFile", () => {
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "litellm");
+    const svc = getService(parsed, "llm-proxy");
 
     expect(svc.healthcheck).toEqual({
       test: [
@@ -1333,8 +1333,8 @@ describe("generateComposeFile", () => {
 
   it("uses service_started for deps without healthcheck", async () => {
     const services = {
-      "af-api": makeService({
-        id: "af-api",
+      "api": makeService({
+        id: "api",
         runtime: {
           command: "bun run src/index.ts",
           cpu: "1",
@@ -1343,26 +1343,26 @@ describe("generateComposeFile", () => {
           deps: [],
         },
       }),
-      "af-web": makeService({
-        id: "af-web",
+      "web": makeService({
+        id: "web",
         image: "some-external:latest",
         runtime: {
           cpu: "0.5",
           memory: "256Mi",
           port: 3000,
-          deps: ["af-api"],
+          deps: ["api"],
         },
-        runtimeDeps: ["af-api"],
+        runtimeDeps: ["api"],
       }),
     };
 
     const runner = makeRunner(services);
     const parsed = await parseGenerated(runner);
-    const svc = getService(parsed, "af-web");
+    const svc = getService(parsed, "web");
 
-    // af-api is a built service with a port, so it has a default healthcheck
+    // api is a built service with a port, so it has a default healthcheck
     expect(svc.depends_on).toEqual({
-      "af-api": { condition: "service_healthy" },
+      "api": { condition: "service_healthy" },
     });
   });
 
