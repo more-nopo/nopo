@@ -1,0 +1,9 @@
+name: mcp
+description: nopo MCP server
+
+commands:
+  compile: bun run build
+  test: bun run test
+  check:
+    commands:
+      types: bunx --bun tsc --noEmit
