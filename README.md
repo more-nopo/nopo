@@ -40,6 +40,10 @@ nopo status
 nopo list
 ```
 
+## CI
+
+Merges to `main` go through GitHub's native merge queue. Job `ci` runs `nopo test` on pull requests and on the merge group. Job `platforms` (ubuntu and macOS) runs on the merge group only.
+
 ## Prerequisites
 
 - Bun 1.3+
