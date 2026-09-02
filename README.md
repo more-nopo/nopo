@@ -6,7 +6,7 @@ Nopo is licensed under GPL-3.0-only.
 
 The published package is `@more-nopo/nopo`. The bin name is `nopo`.
 
-This repository ships the CLI plus first-party plugins. Docs and mcp land in later commits.
+This repository ships the CLI plus first-party plugins. Docs live in `nopo/docs` and publish to https://more-nopo.github.io/nopo/. mcp lands in a later commit.
 
 ## Setup
 

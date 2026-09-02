@@ -8,3 +8,4 @@
 **/.vite
 **/.vite-temp
 gitleaks-report.json
+.docs-staging/
