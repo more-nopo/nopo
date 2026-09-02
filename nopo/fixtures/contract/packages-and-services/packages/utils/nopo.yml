@@ -1,0 +1,7 @@
+name: utils
+description: Package — no runtime block. Build-only target.
+
+build:
+  command: echo "build utils"
+  deps:
+    - shared

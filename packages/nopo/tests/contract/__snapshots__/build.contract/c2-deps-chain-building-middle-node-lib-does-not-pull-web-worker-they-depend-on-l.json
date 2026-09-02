@@ -1,0 +1,102 @@
+{
+  "services": [
+    "core",
+    "lib"
+  ],
+  "command": "build",
+  "targets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "lib"
+  ],
+  "finalTargets": [
+    "core",
+    "lib"
+  ],
+  "dependencies": {
+    "core": [],
+    "lib": [
+      "core"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:core",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "core",
+        "payload": {
+          "target": "core",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:lib",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build",
+          "build:core"
+        ],
+        "target": "lib",
+        "payload": {
+          "target": "lib",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "build:core",
+          "build:lib"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

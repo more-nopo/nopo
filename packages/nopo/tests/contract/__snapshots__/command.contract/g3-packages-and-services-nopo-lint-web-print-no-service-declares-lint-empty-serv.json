@@ -1,0 +1,70 @@
+{
+  "services": [],
+  "command": "lint",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "finalTargets": [],
+  "dependencies": {},
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": false
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:pre"
+        },
+        "needs": [],
+        "payload": {
+          "commandName": "lint",
+          "targets": [],
+          "stageCount": 0
+        },
+        "meta": {
+          "script": "command",
+          "phase": "pre"
+        }
+      },
+      {
+        "id": "post_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:post"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "payload": {
+          "commandName": "lint"
+        },
+        "meta": {
+          "script": "command",
+          "phase": "post"
+        }
+      }
+    ]
+  }
+}

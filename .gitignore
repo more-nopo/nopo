@@ -1,0 +1,10 @@
+.DS_Store
+**/.config
+**/.cache
+**/node_modules
+**/build/
+**/.env
+**/tsconfig.tsbuildinfo
+**/.vite
+**/.vite-temp
+gitleaks-report.json

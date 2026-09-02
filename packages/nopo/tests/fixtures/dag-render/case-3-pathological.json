@@ -1,0 +1,122 @@
+{
+  "_comment": "Case 3 (pathological): build with 12 services where 3 depend on a node from 2 columns back. Layered as: pre_build -> pkg-core (col 0) -> pkg-utils, pkg-types (col 1) -> svc-a..svc-h (col 2, 8 services). Then svc-x, svc-y, svc-z each depend on pkg-core (a node from 2 columns back, plus their own col-2 sibling) — creating cross-stage edges. Adds heavy fan-in into post_build (12 incoming edges) and a long-jump cross from pkg-core skipping pkg-utils to reach svc-x/y/z. Stresses dagre's edge crossing minimization.",
+  "nodes": [
+    {
+      "id": "pre_build",
+      "handler": { "kind": "builtin", "name": "build:pre" },
+      "needs": [],
+      "meta": { "script": "build" }
+    },
+
+    {
+      "id": "build:pkg-core",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build"],
+      "target": "pkg-core",
+      "payload": { "target": "pkg-core", "noCache": false },
+      "meta": { "script": "build" }
+    },
+
+    {
+      "id": "build:pkg-utils",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-core"],
+      "target": "pkg-utils",
+      "payload": { "target": "pkg-utils", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:pkg-types",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-core"],
+      "target": "pkg-types",
+      "payload": { "target": "pkg-types", "noCache": false },
+      "meta": { "script": "build" }
+    },
+
+    {
+      "id": "build:svc-a",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-utils", "build:pkg-types"],
+      "target": "svc-a",
+      "payload": { "target": "svc-a", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:svc-b",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-utils"],
+      "target": "svc-b",
+      "payload": { "target": "svc-b", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:svc-c",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-types"],
+      "target": "svc-c",
+      "payload": { "target": "svc-c", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:svc-d",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-utils", "build:pkg-types"],
+      "target": "svc-d",
+      "payload": { "target": "svc-d", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:svc-e",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-utils"],
+      "target": "svc-e",
+      "payload": { "target": "svc-e", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:svc-f",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-types"],
+      "target": "svc-f",
+      "payload": { "target": "svc-f", "noCache": false },
+      "meta": { "script": "build" }
+    },
+
+    {
+      "id": "build:svc-x",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-core", "build:svc-a"],
+      "target": "svc-x",
+      "payload": { "target": "svc-x", "noCache": false },
+      "meta": { "script": "build", "comment": "cross-stage edge: depends on pkg-core (2 cols back) AND svc-a (col 2 sibling)" }
+    },
+    {
+      "id": "build:svc-y",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-core", "build:svc-d"],
+      "target": "svc-y",
+      "payload": { "target": "svc-y", "noCache": false },
+      "meta": { "script": "build", "comment": "cross-stage edge: depends on pkg-core (2 cols back) AND svc-d (col 2 sibling)" }
+    },
+    {
+      "id": "build:svc-z",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-core", "build:svc-f"],
+      "target": "svc-z",
+      "payload": { "target": "svc-z", "noCache": false },
+      "meta": { "script": "build", "comment": "cross-stage edge: depends on pkg-core (2 cols back) AND svc-f (col 2 sibling)" }
+    },
+
+    {
+      "id": "post_build",
+      "handler": { "kind": "builtin", "name": "build:post" },
+      "needs": [
+        "build:pkg-core", "build:pkg-utils", "build:pkg-types",
+        "build:svc-a", "build:svc-b", "build:svc-c", "build:svc-d",
+        "build:svc-e", "build:svc-f", "build:svc-x", "build:svc-y", "build:svc-z"
+      ],
+      "meta": { "script": "build" }
+    }
+  ]
+}

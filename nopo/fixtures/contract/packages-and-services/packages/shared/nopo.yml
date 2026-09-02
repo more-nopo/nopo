@@ -1,0 +1,5 @@
+name: shared
+description: Package — no runtime block. Build-only target.
+
+build:
+  command: echo "build shared"

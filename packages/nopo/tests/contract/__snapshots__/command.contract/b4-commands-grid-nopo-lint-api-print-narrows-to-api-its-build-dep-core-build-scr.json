@@ -1,0 +1,137 @@
+{
+  "services": [
+    "api",
+    "core"
+  ],
+  "command": "lint",
+  "targets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "finalTargets": [
+    "api",
+    "core"
+  ],
+  "dependencies": {
+    "api": [
+      "core"
+    ],
+    "core": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:pre"
+        },
+        "needs": [],
+        "payload": {
+          "commandName": "lint",
+          "targets": [
+            "api",
+            "core"
+          ],
+          "stageCount": 1
+        },
+        "meta": {
+          "script": "command",
+          "phase": "pre"
+        }
+      },
+      {
+        "id": "cmd:0:api:lint",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "api",
+        "payload": {
+          "commandName": "lint",
+          "stageIndex": 0,
+          "task": {
+            "service": "api",
+            "command": "lint",
+            "executable": "echo \"FIXTURE_GRID_API_LINT\"",
+            "context": "container"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "lint"
+        }
+      },
+      {
+        "id": "cmd:0:core:lint",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "core",
+        "payload": {
+          "commandName": "lint",
+          "stageIndex": 0,
+          "task": {
+            "service": "core",
+            "command": "lint",
+            "executable": "echo \"FIXTURE_GRID_CORE_LINT\"",
+            "context": "host"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "lint"
+        }
+      },
+      {
+        "id": "post_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:post"
+        },
+        "needs": [
+          "cmd:0:api:lint",
+          "cmd:0:core:lint"
+        ],
+        "payload": {
+          "commandName": "lint"
+        },
+        "meta": {
+          "script": "command",
+          "phase": "post"
+        }
+      }
+    ]
+  }
+}

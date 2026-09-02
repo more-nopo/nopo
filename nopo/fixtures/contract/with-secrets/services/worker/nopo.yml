@@ -1,0 +1,16 @@
+name: worker
+description: "Service with flat-shape runtime + a single secret. Exercises the auto-wrap path (flat -> { default: <flat> })."
+tags: [secrets]
+
+build:
+  command: echo "build worker"
+
+# Flat-shape runtime. Auto-wrapped to `{ default: <flat> }` by the parser.
+# QUEUE_TOKEN decrypts to "test-queue-token-default" with the dummy identity.
+runtime:
+  command: echo "run worker"
+  port: 4000
+  cpu: "0.25"
+  memory: "128Mi"
+  secrets:
+    QUEUE_TOKEN: "ENC[AES256_GCM,data:Q8+0lZezz1Xj2shpvRgvsfDq7lxlAxi7,iv:5VwPS0qkQtlmoszr,tag:KFbrBQdy+qU0G7PZneN3EA==,key:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBPWVNnZEozNFJacnNnSzc4TWVoQ2p2cnZsU1Y4TXVLMHl5ejRoZnQyYkY0Clc4TEVRUkVYZkZxeDlHUTZiNVhvUjVFVXJkNGJzVWMvcXVYaFBXNlhsSHcKLS0tIDQvQWhIakw3UEdlZzgvaHEwMys0UDF4R2VNWlN5OXU4cEtadEZvakdCT0EKdf1z8jUsr7M1L+25yICSUeWP3MHHrgwKWXFd8T30XwDlxqrhviBys28MT0rwjRp8IIZNatkA2i+rcoNWO3xQtQ==,type:str]"

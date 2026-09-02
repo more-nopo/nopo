@@ -1,0 +1,46 @@
+# Nopo
+
+A TypeScript CLI for monorepo Docker builds, service orchestration, testing, and deployment.
+
+Nopo is licensed under GPL-3.0-only.
+
+The published package is `@more-nopo/nopo`. The bin name is `nopo`.
+
+This repository currently ships the CLI slice plus hosted CI. First-party plugins, docs, and mcp land in later commits.
+
+## Setup
+
+```bash
+bun install
+nopo --help
+```
+
+`bun install` links workspace `@more-nopo/nopo` so the `nopo` bin is on PATH.
+
+Install from GitHub Packages:
+
+```bash
+# .npmrc
+# @more-nopo:registry=https://npm.pkg.github.com
+bun add -g @more-nopo/nopo
+```
+
+GitHub Packages still needs a token with `read:packages` for install.
+
+## Commands
+
+```bash
+nopo build [service]
+nopo up [service]
+nopo check [service]
+nopo test [service]
+nopo fix [service]
+nopo env
+nopo status
+nopo list
+```
+
+## Prerequisites
+
+- Bun 1.3+
+- Node.js 22+

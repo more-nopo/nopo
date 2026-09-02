@@ -1,0 +1,39 @@
+name: Secrets Map Fixture
+description: Service with a map-shape runtime, default + prod overlays. Used for secret CLI tests.
+tags: [fixture, secrets]
+
+build:
+  command: echo "build secrets-map"
+
+# Map-shape runtime: default + named overlays.
+#
+# The `secrets:` blocks here are structurally-valid placeholder ENC[...]
+# strings so they pass `SecretCiphertextSchema` (`ENC[` prefix) when the
+# project loads. They will NOT decrypt with any real key — tests that need
+# real plaintext call `nopo secret set` against a fresh tmpdir age key
+# before reading back. The placeholders document the shape we expect:
+#
+#   - `default.secrets.API_KEY` — baseline, inherited by every overlay
+#   - `prod.secrets.API_KEY`    — overrides the default in the `prod` overlay
+#   - `prod.secrets.DB_PASS`    — extra key only present in the `prod` overlay
+#
+# `resolveRuntime(svc.runtimes, "prod").envs.secrets` should yield the prod
+# values for API_KEY (overridden) and DB_PASS (added), preserving every
+# default key not overridden in prod.
+runtime:
+  default:
+    command: node server.js
+    port: 3002
+    cpu: "0.25"
+    memory: "64Mi"
+    secrets:
+      API_KEY: "ENC[AES256_GCM,placeholder-default-api-key,iv:0,tag:0,type:str]"
+  prod:
+    cpu: "1"
+    memory: "256Mi"
+    secrets:
+      API_KEY: "ENC[AES256_GCM,placeholder-prod-api-key,iv:0,tag:0,type:str]"
+      DB_PASS: "ENC[AES256_GCM,placeholder-prod-db-pass,iv:0,tag:0,type:str]"
+
+commands:
+  test: echo "FIXTURE_SECRETS_MAP_TEST_SUCCESS"

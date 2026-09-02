@@ -1,0 +1,6 @@
+name: contract-packages-and-services
+
+services:
+  dirs:
+    - ./services
+    - ./packages

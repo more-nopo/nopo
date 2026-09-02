@@ -1,0 +1,11 @@
+name: api
+description: Service — has runtime block. Build-depends on shared (cross-type edge).
+
+build:
+  command: echo "build api"
+  deps:
+    - shared
+
+runtime:
+  command: echo "run api"
+  port: 3000

@@ -1,0 +1,9 @@
+name: app
+description: Single service with the minimum required fields.
+
+build:
+  command: echo "build app"
+
+runtime:
+  command: echo "run app"
+  port: 8080

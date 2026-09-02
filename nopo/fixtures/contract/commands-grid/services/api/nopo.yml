@@ -1,0 +1,30 @@
+name: api
+description: Service with full command grid. test:integration depends on its own build (command-on-command dep).
+
+build:
+  command: echo "build api"
+  deps:
+    - core
+
+runtime:
+  command: echo "run api"
+  port: 3000
+
+commands:
+  lint:
+    command: echo "FIXTURE_GRID_API_LINT"
+    context: container
+  format:
+    command: echo "FIXTURE_GRID_API_FORMAT"
+    context: host
+  test:
+    command: echo "FIXTURE_GRID_API_TEST"
+    context: container
+  # Integration test depends on the api's own build having happened first.
+  # Exercises command-on-command (intra-service) dependency edges.
+  test:integration:
+    command: echo "FIXTURE_GRID_API_TEST_INTEGRATION"
+    context: container
+    dependencies:
+      api:
+        - build

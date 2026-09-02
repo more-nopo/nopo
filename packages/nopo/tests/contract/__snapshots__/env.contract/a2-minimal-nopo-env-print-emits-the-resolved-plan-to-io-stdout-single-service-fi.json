@@ -1,0 +1,38 @@
+{
+  "services": [
+    "app"
+  ],
+  "command": "env",
+  "targets": [
+    "app"
+  ],
+  "filteredTargets": [
+    "app"
+  ],
+  "finalTargets": [
+    "app"
+  ],
+  "dependencies": {
+    "app": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "env",
+        "handler": {
+          "kind": "builtin",
+          "name": "env:apply"
+        },
+        "needs": [],
+        "meta": {
+          "script": "env"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "services": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "command": "build",
+  "targets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "api": [],
+    "web": [],
+    "worker": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [
+    "dev-plugin",
+    "prod-plugin"
+  ],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:api",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "api",
+        "payload": {
+          "target": "api",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:web",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "web",
+        "payload": {
+          "target": "web",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:worker",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "worker",
+        "payload": {
+          "target": "worker",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "build:api",
+          "build:web",
+          "build:worker"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+name: db
+description: Database
+image: postgres:16

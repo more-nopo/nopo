@@ -1,0 +1,22 @@
+name: Utils Package
+description: Utility functions shared across services
+tags:
+  - fixture-tag
+
+# No runtime or image - this is a package
+
+# Build configuration for package builds via docker run
+build:
+  command: echo "FIXTURE_UTILS_BUILD_SUCCESS"
+  output: ./dist
+  # Build dependencies - shared package must be built first
+  deps:
+    - shared
+
+commands:
+  test: echo "FIXTURE_UTILS_TEST_SUCCESS"
+  check: echo "FIXTURE_UTILS_CHECK_SUCCESS"
+  compile:
+    command: echo "FIXTURE_UTILS_COMPILE_SUCCESS"
+    dependencies:
+      - shared

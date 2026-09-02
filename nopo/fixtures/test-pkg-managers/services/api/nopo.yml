@@ -1,0 +1,12 @@
+name: api
+description: API service using bun
+package_managers: [bun]
+build:
+  command: echo "build api"
+runtime:
+  command: echo "run api"
+  port: 3000
+  cpu: "1"
+  memory: "512Mi"
+commands:
+  test: echo "test api"

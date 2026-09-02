@@ -1,0 +1,7 @@
+name: lib
+description: Middle of the build chain (B in A->B->C). Build-depends on core.
+
+build:
+  command: echo "build lib"
+  deps:
+    - core

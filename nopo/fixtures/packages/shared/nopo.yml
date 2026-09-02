@@ -1,0 +1,17 @@
+name: Shared Package
+description: Shared utilities used by services
+tags:
+  - fixture-tag
+
+# No runtime or image - this is a package
+# Build configuration for package builds via docker run
+build:
+  command: echo "FIXTURE_SHARED_BUILD_SUCCESS"
+  output: ./dist
+  env:
+    NODE_ENV: production
+
+commands:
+  test: echo "FIXTURE_SHARED_TEST_SUCCESS"
+  check: echo "FIXTURE_SHARED_CHECK_SUCCESS"
+  compile: echo "FIXTURE_SHARED_COMPILE_SUCCESS"

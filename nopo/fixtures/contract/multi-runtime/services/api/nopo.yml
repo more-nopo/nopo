@@ -1,0 +1,11 @@
+name: api
+description: Service with no per-runtime overlay — same config for default + prod.
+
+build:
+  command: echo "build api"
+
+runtime:
+  command: echo "run api"
+  port: 3000
+  cpu: "0.5"
+  memory: "256Mi"

@@ -1,0 +1,29 @@
+name: contract-plugin-commands
+
+# Fixture for M4.8 — plugin-introduced top-level commands
+# (`nopo <plugin> <cmd>`). Uses path-loaded inline plugins so the fixture
+# has zero dependency on the workspace `@more-nopo/nopo-plugin-*` packages
+# (which aren't pre-built in the test environment — see all-plugins).
+#
+# Two plugins:
+#
+#   cli-plugin    Introduces `nopo cli-plugin <cmd>` for several command
+#                 shapes: a plain command, one with --print, one that
+#                 spawns a subprocess via ctx.shell, one that throws,
+#                 one with positional args, one with hooks (pre_build).
+#
+#   shadow-plugin A second plugin used to assert ordering and
+#                 collision behavior. Defines a single `noop` command.
+#
+# Order matters: plugin-load order = the order plugins appear in
+# config.project.plugins, which determines additive-hook firing order.
+
+services:
+  dirs:
+    - ./services
+
+plugins:
+  - name: cli-plugin
+    path: ./plugins/cli-plugin.cjs
+  - name: shadow-plugin
+    path: ./plugins/shadow-plugin.cjs

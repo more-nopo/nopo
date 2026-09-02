@@ -1,0 +1,74 @@
+{
+  "services": [
+    "app"
+  ],
+  "command": "build",
+  "targets": [
+    "app"
+  ],
+  "filteredTargets": [
+    "app"
+  ],
+  "finalTargets": [
+    "app"
+  ],
+  "dependencies": {
+    "app": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:app",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "app",
+        "payload": {
+          "target": "app",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "build:app"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

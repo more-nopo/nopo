@@ -1,0 +1,7 @@
+title = "nopo"
+
+[allowlist]
+description = "Documented dummy age identity for contract fixtures. Test use only."
+paths = [
+  '''nopo/fixtures/contract/with-secrets/dummy-identity.txt''',
+]

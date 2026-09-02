@@ -1,0 +1,43 @@
+{
+  "services": [
+    "app"
+  ],
+  "command": "act",
+  "targets": [
+    "app"
+  ],
+  "filteredTargets": [
+    "app"
+  ],
+  "finalTargets": [
+    "app"
+  ],
+  "dependencies": {
+    "app": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "act",
+        "handler": {
+          "kind": "builtin",
+          "name": "act:run"
+        },
+        "needs": [],
+        "payload": {
+          "event": "workflow_dispatch",
+          "verbose": false,
+          "inputs": []
+        },
+        "meta": {
+          "script": "act"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "nopo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "nopo CLI",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "workspaces": [
+    "packages/nopo"
+  ],
+  "scripts": {
+    "postinstall": "cd packages/nopo && (bun unlink 2>/dev/null || true) && bun link"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.1",
+    "@more-nopo/nopo": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

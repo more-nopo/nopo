@@ -1,0 +1,14 @@
+name: worker
+description: Service with a per-runtime port override only — proves named overlay can override a single scalar.
+
+build:
+  command: echo "build worker"
+
+runtime:
+  default:
+    command: echo "run worker (dev)"
+    port: 4000
+    cpu: "0.25"
+    memory: "128Mi"
+  prod:
+    port: 4443

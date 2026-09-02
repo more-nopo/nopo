@@ -1,0 +1,38 @@
+name: Runtime Map Fixture
+description: Service exercising the runtime map shape
+tags: [fixture, runtime-map]
+
+build:
+  command: echo "build runtime-map"
+
+# Map-shape runtime: default + named overlays.
+# `default` is required when the map shape is used.
+runtime:
+  default:
+    command: node server.js
+    port: 3000
+    cpu: "1"
+    memory: "512Mi"
+    env:
+      LOG_LEVEL: info
+      FEATURE_X: "true"
+    secrets:
+      API_KEY: "ENC[AES256_GCM,data:fixture-default,iv:abc,tag:def,type:str]"
+    deps:
+      - db
+  prod:
+    cpu: "2"
+    memory: "1Gi"
+    env:
+      LOG_LEVEL: warn
+    secrets:
+      API_KEY: "ENC[AES256_GCM,data:fixture-prod,iv:xyz,tag:uvw,type:str]"
+  test:
+    # Test runtime overrides with plaintext env (NOT secrets) so test
+    # processes can boot deterministically without needing the encryption
+    # key. name.env wins over default.secret for the same key.
+    env:
+      API_KEY: "deterministic-test-api-key"
+
+commands:
+  test: echo "FIXTURE_RUNTIME_MAP_TEST_SUCCESS"

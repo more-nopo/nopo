@@ -1,0 +1,97 @@
+{
+  "services": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "command": "up",
+  "targets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "core": [],
+    "lib": [
+      "core"
+    ],
+    "web": [
+      "lib"
+    ],
+    "worker": [
+      "web"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": "HEAD",
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_up",
+        "handler": {
+          "kind": "builtin",
+          "name": "up:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "up",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "up",
+        "handler": {
+          "kind": "builtin",
+          "name": "up:main"
+        },
+        "needs": [
+          "pre_up"
+        ],
+        "meta": {
+          "script": "up",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "post_up",
+        "handler": {
+          "kind": "builtin",
+          "name": "up:post"
+        },
+        "needs": [
+          "up"
+        ],
+        "meta": {
+          "script": "up",
+          "runtime": "default"
+        }
+      }
+    ]
+  }
+}

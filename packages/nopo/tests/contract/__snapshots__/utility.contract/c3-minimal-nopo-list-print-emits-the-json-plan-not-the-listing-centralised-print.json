@@ -1,0 +1,38 @@
+{
+  "services": [
+    "app"
+  ],
+  "command": "list",
+  "targets": [
+    "app"
+  ],
+  "filteredTargets": [
+    "app"
+  ],
+  "finalTargets": [
+    "app"
+  ],
+  "dependencies": {
+    "app": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "list",
+        "handler": {
+          "kind": "builtin",
+          "name": "list:run"
+        },
+        "needs": [],
+        "meta": {
+          "script": "list"
+        }
+      }
+    ]
+  }
+}

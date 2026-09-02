@@ -1,0 +1,137 @@
+{
+  "services": [
+    "api",
+    "core"
+  ],
+  "command": "format",
+  "targets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "finalTargets": [
+    "api",
+    "core"
+  ],
+  "dependencies": {
+    "api": [
+      "core"
+    ],
+    "core": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": false
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:pre"
+        },
+        "needs": [],
+        "payload": {
+          "commandName": "format",
+          "targets": [
+            "api",
+            "core"
+          ],
+          "stageCount": 1
+        },
+        "meta": {
+          "script": "command",
+          "phase": "pre"
+        }
+      },
+      {
+        "id": "cmd:0:api:format",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "api",
+        "payload": {
+          "commandName": "format",
+          "stageIndex": 0,
+          "task": {
+            "service": "api",
+            "command": "format",
+            "executable": "echo \"FIXTURE_GRID_API_FORMAT\"",
+            "context": "host"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "format"
+        }
+      },
+      {
+        "id": "cmd:0:core:format",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "core",
+        "payload": {
+          "commandName": "format",
+          "stageIndex": 0,
+          "task": {
+            "service": "core",
+            "command": "format",
+            "executable": "echo \"FIXTURE_GRID_CORE_FORMAT\"",
+            "context": "host"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "format"
+        }
+      },
+      {
+        "id": "post_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:post"
+        },
+        "needs": [
+          "cmd:0:api:format",
+          "cmd:0:core:format"
+        ],
+        "payload": {
+          "commandName": "format"
+        },
+        "meta": {
+          "script": "command",
+          "phase": "post"
+        }
+      }
+    ]
+  }
+}

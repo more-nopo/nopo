@@ -1,0 +1,26 @@
+name: web
+description: Service with lint + test only — used to prove --concurrency parallelizes across services.
+
+build:
+  command: echo "build web"
+
+runtime:
+  command: echo "run web"
+  port: 8080
+
+commands:
+  lint:
+    command: echo "FIXTURE_GRID_WEB_LINT"
+    context: host
+  test:
+    command: echo "FIXTURE_GRID_WEB_TEST"
+    context: container
+  # test:integration on web depends on api's test:integration finishing
+  # first. Cross-service command edge — proves the command DAG can wire
+  # command-on-command across service boundaries.
+  test:integration:
+    command: echo "FIXTURE_GRID_WEB_TEST_INTEGRATION"
+    context: container
+    dependencies:
+      api:
+        - test:integration

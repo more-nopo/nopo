@@ -1,0 +1,12 @@
+name: backend
+description: Backend using both uv and bun
+package_managers: [uv, bun]
+build:
+  command: echo "build backend"
+runtime:
+  command: echo "run backend"
+  port: 8000
+  cpu: "1"
+  memory: "512Mi"
+commands:
+  test: echo "test backend"

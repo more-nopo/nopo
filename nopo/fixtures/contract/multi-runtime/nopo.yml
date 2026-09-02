@@ -1,0 +1,21 @@
+name: contract-multi-runtime
+
+services:
+  dirs:
+    - ./services
+
+# Two named plugins. Both are inline path-loaded stubs so the fixture has zero
+# dependency on the real workspace plugins (keeps it pure data + a tiny .ts).
+plugins:
+  - name: dev-plugin
+    path: ./plugins/dev-plugin.ts
+  - name: prod-plugin
+    path: ./plugins/prod-plugin.ts
+
+# Runtime -> plugin map. Tests exercise:
+#   - default        -> dev-plugin   (`nopo up` with no --runtime)
+#   - prod           -> prod-plugin  (`nopo up --runtime prod`)
+#   - unknown name   -> fail-fast error (`nopo up --runtime nope`)
+runtimes:
+  default: dev-plugin
+  prod: prod-plugin

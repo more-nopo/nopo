@@ -1,0 +1,103 @@
+{
+  "services": [
+    "web"
+  ],
+  "command": "test:integration",
+  "targets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "finalTargets": [
+    "web"
+  ],
+  "dependencies": {
+    "web": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:pre"
+        },
+        "needs": [],
+        "payload": {
+          "commandName": "test:integration",
+          "targets": [
+            "web"
+          ],
+          "stageCount": 1
+        },
+        "meta": {
+          "script": "command",
+          "phase": "pre"
+        }
+      },
+      {
+        "id": "cmd:0:web:test:integration",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "web",
+        "payload": {
+          "commandName": "test:integration",
+          "stageIndex": 0,
+          "task": {
+            "service": "web",
+            "command": "test:integration",
+            "executable": "echo \"FIXTURE_GRID_WEB_TEST_INTEGRATION\"",
+            "context": "container"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "test:integration"
+        }
+      },
+      {
+        "id": "post_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:post"
+        },
+        "needs": [
+          "cmd:0:web:test:integration"
+        ],
+        "payload": {
+          "commandName": "test:integration"
+        },
+        "meta": {
+          "script": "command",
+          "phase": "post"
+        }
+      }
+    ]
+  }
+}

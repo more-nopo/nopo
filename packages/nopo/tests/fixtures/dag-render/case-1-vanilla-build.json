@@ -1,0 +1,72 @@
+{
+  "_comment": "Case 1: vanilla `nopo build` over 5 services with one shared package dep. Topology: pre_build -> build:pkg-shared -> [build:web, build:api, build:worker, build:cron] -> post_build. build:db has no package dep. Mirrors BuildScript.plan() with one package node fanning into multiple service nodes.",
+  "nodes": [
+    {
+      "id": "pre_build",
+      "handler": { "kind": "builtin", "name": "build:pre" },
+      "needs": [],
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:pkg-shared",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build"],
+      "target": "pkg-shared",
+      "payload": { "target": "pkg-shared", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:db",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build"],
+      "target": "db",
+      "payload": { "target": "db", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:api",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-shared"],
+      "target": "api",
+      "payload": { "target": "api", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:web",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-shared"],
+      "target": "web",
+      "payload": { "target": "web", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:worker",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-shared"],
+      "target": "worker",
+      "payload": { "target": "worker", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "build:cron",
+      "handler": { "kind": "builtin", "name": "build:exec" },
+      "needs": ["pre_build", "build:pkg-shared"],
+      "target": "cron",
+      "payload": { "target": "cron", "noCache": false },
+      "meta": { "script": "build" }
+    },
+    {
+      "id": "post_build",
+      "handler": { "kind": "builtin", "name": "build:post" },
+      "needs": [
+        "build:pkg-shared",
+        "build:db",
+        "build:api",
+        "build:web",
+        "build:worker",
+        "build:cron"
+      ],
+      "meta": { "script": "build" }
+    }
+  ]
+}

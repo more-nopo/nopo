@@ -1,0 +1,29 @@
+name: api
+description: Service with map-shape runtime + secrets in default and prod overlays.
+tags: [secrets]
+
+build:
+  command: echo "build api"
+
+# Map-shape runtime to exercise overlay merging of secrets:
+#   - default.secrets.API_KEY      -> "test-api-key-default"
+#   - prod.secrets.API_KEY         -> "test-api-key-prod"      (overrides default)
+#   - prod.secrets.DB_PASSWORD     -> "test-db-password-prod"  (added in prod)
+#
+# All values were encrypted with the dummy age recipient documented in
+# ../README.md. Tests load the dummy identity from ../dummy-identity.txt
+# and assert decryption matches the plaintext above.
+runtime:
+  default:
+    command: echo "run api"
+    port: 3000
+    cpu: "0.5"
+    memory: "256Mi"
+    secrets:
+      API_KEY: "ENC[AES256_GCM,data:yVJImKUryuOF1cXMMtAXVmP+GXY=,iv:k1EHXHVLgEp+/FPI,tag:746YzNlNuelUS2lWiAXhmA==,key:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB6d21XVGRaN25PTE1DNHBDakF2RzB5Y3diQWpTV28vdk1yS3Z5a1hKa1hJCmdUL0dwMWpYUzl3MWRtZWMyWVVEMk5NRGFPYnNpcXZpMXJka3dHZFpwblEKLS0tIEkvQnJxalRqN0dwMzkzQzBVZk94a2F2aHRTaURCRitrZ3hLNGdGaitQV3MKS4cFfCjMduPLNHEO1SZhTpTDn71sB4UPLit096sBeRcF05bIm/PFewy9LI8KP3ZqmP/W2w6VLPFZAb07SthVSQ==,type:str]"
+  prod:
+    cpu: "1"
+    memory: "512Mi"
+    secrets:
+      API_KEY: "ENC[AES256_GCM,data:ssGPaXZUh3iezJyo/2t03M4=,iv:wc3JhwxP2u+pQUYx,tag:CRW1p1PbXFw9n72NhyTdpQ==,key:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvd2pRVVk1R25kYW1IVnFwNE1MRDlackt2amhVV2dVbW9hckJqeUZ2dUh3CmNPMnBSL1NlMGJJS1c3d0NsbW9sL0RUSm43SE95MjlnTEdTWmNrc0I5TWsKLS0tIHlnSzJVeFpMQ0xEVlNCUDFLWE5wRmE1aHpWaDBZWHRYZmRaYXN2UWVFc2MKH7UxjhsA1veTTzvaX0TGvSSruRaJS6252Fajd/MjkmNZQAFFIQ9mpeBtAOKANOUvTi+q+JrLUpxUNzHCUm28Kg==,type:str]"
+      DB_PASSWORD: "ENC[AES256_GCM,data:VFb5yr/0FmLS7plGPTBKTTnsz/N/,iv:cSzFOsEJkaYp+Yzn,tag:Hax0GVbb4POYqND3A/dUmA==,key:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBYS1owRGh4NllLUzVOcTZHbW9xL3NUQjVvODk5L0VPSDkrdytmSElGaWo0CmZKVkxiL0J5Qld1d1E0ZzQzR0hiVExQaE9rVHkxbHcvVVdEUGI1NW1iaUEKLS0tIHBFeWdoTTBwZHE3Um1TMUFyd3dMNklidUl4dC94aTlOSllITXEwK09zMGcK9oqWczDtDFKMLeJOBFlBo3o714vYHSocYKW8Q9yOidXgCWIm1edC071OM+lPyX+zQFGt1scnCAyEM97DfCWbXA==,type:str]"

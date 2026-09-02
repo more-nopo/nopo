@@ -1,0 +1,33 @@
+name: Dependent Fixture Service
+description: A service that depends on both services and packages
+
+# Runtime config makes this a "service" (not a package)
+runtime:
+  cpu: "1"
+  memory: "256Mi"
+  port: 4000
+  # Runtime dependencies - these services must be available at runtime
+  deps:
+    - minimal
+
+# Build dependencies - packages needed at build time
+build:
+  command: echo "build dependent"
+  deps:
+    - shared
+    - utils
+
+commands:
+  test:
+    command: echo "FIXTURE_DEPENDENT_TEST_SUCCESS"
+    dependencies:
+      minimal:
+        - test
+  check: echo "FIXTURE_DEPENDENT_CHECK_SUCCESS"
+  integration:
+    command: echo "FIXTURE_DEPENDENT_INTEGRATION_SUCCESS"
+    dependencies:
+      minimal:
+        - test
+      complex:
+        - test

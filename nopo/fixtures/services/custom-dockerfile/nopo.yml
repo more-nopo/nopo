@@ -1,0 +1,10 @@
+name: custom-dockerfile
+description: Fixture service with a custom Dockerfile (no inline generation)
+
+build:
+  dockerfile: Dockerfile
+
+runtime:
+  cpu: "0.5"
+  memory: "128Mi"
+  port: 8080

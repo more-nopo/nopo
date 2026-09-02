@@ -1,0 +1,157 @@
+{
+  "services": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "command": "build",
+  "targets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "core": [],
+    "lib": [
+      "core"
+    ],
+    "web": [
+      "lib"
+    ],
+    "worker": [
+      "web"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:core",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "core",
+        "payload": {
+          "target": "core",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:lib",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build",
+          "build:core"
+        ],
+        "target": "lib",
+        "payload": {
+          "target": "lib",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:web",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build",
+          "build:lib",
+          "build:core"
+        ],
+        "target": "web",
+        "payload": {
+          "target": "web",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:worker",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build",
+          "build:core",
+          "build:lib"
+        ],
+        "target": "worker",
+        "payload": {
+          "target": "worker",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "build:core",
+          "build:lib",
+          "build:web",
+          "build:worker"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+name: worker
+description: Independent service with a runtime-only edge to web. No build deps.
+
+build:
+  command: echo "build worker"
+
+runtime:
+  command: echo "run worker"
+  port: 4000
+  deps:
+    - web

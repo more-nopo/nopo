@@ -1,0 +1,34 @@
+name: Complex Fixture Service
+description: A complex service with runtime configuration
+
+build:
+  command: echo "build complex"
+
+# Runtime config makes this a "service" (not a package)
+runtime:
+  cpu: "1"
+  memory: "256Mi"
+  port: 3000
+
+commands:
+  test: echo "FIXTURE_COMPLEX_TEST_SUCCESS"
+  check:
+    commands:
+      py: echo "FIXTURE_COMPLEX_CHECK_PY_SUCCESS"
+      js: echo "FIXTURE_COMPLEX_CHECK_JS_SUCCESS"
+  compile:
+    commands:
+      dev: echo "FIXTURE_COMPLEX_COMPILE_DEV_SUCCESS"
+      prod: echo "FIXTURE_COMPLEX_COMPILE_PROD_SUCCESS"
+      # This subcommand only exists in complex, not in minimal
+      unique: echo "FIXTURE_COMPLEX_COMPILE_UNIQUE_SUCCESS"
+  # Example command with explicit container context
+  dev:
+    command: echo "FIXTURE_COMPLEX_DEV_SUCCESS"
+    context: container
+  # Example command with subcommands that inherit context
+  lint:
+    context: container
+    commands:
+      py: echo "FIXTURE_COMPLEX_LINT_PY_SUCCESS"
+      js: echo "FIXTURE_COMPLEX_LINT_JS_SUCCESS"

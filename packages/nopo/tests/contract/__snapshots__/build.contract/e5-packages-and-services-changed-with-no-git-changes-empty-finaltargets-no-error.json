@@ -1,0 +1,56 @@
+{
+  "services": [],
+  "command": "build",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [],
+  "finalTargets": [],
+  "dependencies": {},
+  "dependants": [],
+  "filters": [
+    {
+      "type": "preset",
+      "field": "changed"
+    }
+  ],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

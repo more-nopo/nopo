@@ -1,0 +1,10 @@
+name: Nopo Fixtures
+
+os:
+  base:
+    image: alpine:3.19
+
+services:
+  dirs:
+    - ./services
+    - ./packages

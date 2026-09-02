@@ -1,0 +1,44 @@
+{
+  "services": [
+    "core"
+  ],
+  "command": "install",
+  "targets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "core"
+  ],
+  "dependencies": {
+    "core": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "install",
+        "handler": {
+          "kind": "builtin",
+          "name": "install:run"
+        },
+        "needs": [],
+        "meta": {
+          "script": "install"
+        }
+      }
+    ]
+  }
+}

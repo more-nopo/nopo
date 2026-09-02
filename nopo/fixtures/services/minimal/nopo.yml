@@ -1,0 +1,16 @@
+name: Minimal Fixture Service
+description: A minimal service with runtime configuration
+
+build:
+  command: echo "build minimal"
+
+# Runtime config makes this a "service" (not a package)
+runtime:
+  cpu: "0.5"
+  memory: "128Mi"
+  port: 8080
+
+commands:
+  test: echo "FIXTURE_MINIMAL_TEST_SUCCESS"
+  check: echo "FIXTURE_MINIMAL_CHECK_SUCCESS"
+  compile: echo "FIXTURE_MINIMAL_COMPILE_SUCCESS"

@@ -1,0 +1,44 @@
+{
+  "services": [
+    "shared"
+  ],
+  "command": "env",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "finalTargets": [
+    "shared"
+  ],
+  "dependencies": {
+    "shared": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "env",
+        "handler": {
+          "kind": "builtin",
+          "name": "env:apply"
+        },
+        "needs": [],
+        "meta": {
+          "script": "env"
+        }
+      }
+    ]
+  }
+}

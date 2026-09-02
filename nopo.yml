@@ -1,0 +1,18 @@
+name: Nopo
+description: nopo CLI
+
+services:
+  dirs:
+    - ./packages
+
+package_managers:
+  bun:
+    lockfile: bun.lock
+    manifest: package.json
+    requires_source: false
+    install:
+      dev: bun install
+      build: bun install --frozen-lockfile --filter './{service_dir}'
+      prod: bun install --production --frozen-lockfile --filter './{service_dir}'
+    sync: bun install --force
+    modules: node_modules

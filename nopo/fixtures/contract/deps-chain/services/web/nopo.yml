@@ -1,0 +1,11 @@
+name: web
+description: Top of the build chain (C in A->B->C). Build-depends on lib (transitively on core).
+
+build:
+  command: echo "build web"
+  deps:
+    - lib
+
+runtime:
+  command: echo "run web"
+  port: 8080

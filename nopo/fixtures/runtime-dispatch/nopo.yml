@@ -1,0 +1,19 @@
+name: Runtime Dispatch Fixture
+
+services:
+  dirs:
+    - ./services
+
+plugins:
+  - name: alpha
+    path: ./plugins/alpha.ts
+  - name: beta
+    path: ./plugins/beta.ts
+
+# Runtime → plugin map. Tests exercise:
+#   - default → alpha
+#   - prod    → beta
+#   - unknown name → fail-fast error
+runtimes:
+  default: alpha
+  prod: beta

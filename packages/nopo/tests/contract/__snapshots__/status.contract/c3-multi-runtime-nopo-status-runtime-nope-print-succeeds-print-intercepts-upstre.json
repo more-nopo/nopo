@@ -1,0 +1,85 @@
+{
+  "services": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "command": "status",
+  "targets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "api": [],
+    "web": [],
+    "worker": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [
+    "dev-plugin",
+    "prod-plugin"
+  ],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "status",
+          "runtime": "nope"
+        }
+      },
+      {
+        "id": "status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:main"
+        },
+        "needs": [
+          "pre_status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "nope"
+        }
+      },
+      {
+        "id": "post_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:post"
+        },
+        "needs": [
+          "status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "nope"
+        }
+      }
+    ]
+  }
+}

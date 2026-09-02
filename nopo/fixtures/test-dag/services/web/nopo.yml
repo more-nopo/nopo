@@ -1,0 +1,22 @@
+name: Web Frontend
+description: Test web frontend service
+
+build:
+  command: echo "build web"
+  deps:
+    - ui
+    - api
+
+runtime:
+  command: echo "run web"
+  port: 8080
+  cpu: "0.5"
+  memory: "256Mi"
+  deps:
+    - api
+
+commands:
+  test:
+    command: echo "test web"
+  check:
+    command: echo "check web"

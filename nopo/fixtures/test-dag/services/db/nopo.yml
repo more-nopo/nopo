@@ -1,0 +1,12 @@
+name: Database
+description: Test PostgreSQL database service
+image: postgres:16
+
+runtime:
+  port: 5432
+  cpu: "1"
+  memory: "1Gi"
+
+commands:
+  test:
+    command: echo "test db"

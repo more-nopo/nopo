@@ -1,0 +1,19 @@
+name: worker
+description: Worker with standalone cargo
+package_managers:
+  - name: cargo
+    lockfile: Cargo.lock
+    manifest: Cargo.toml
+    install: cargo build --release
+    sync: cargo build
+    modules: target
+    cwd: .
+build:
+  command: echo "build worker"
+runtime:
+  command: echo "run worker"
+  port: 4000
+  cpu: "1"
+  memory: "512Mi"
+commands:
+  test: echo "test worker"

@@ -1,0 +1,7 @@
+name: nginx
+description: Reverse proxy
+image: nginx:latest
+runtime:
+  port: 80
+  cpu: "0.25"
+  memory: "128Mi"

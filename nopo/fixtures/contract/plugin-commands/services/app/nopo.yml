@@ -1,0 +1,9 @@
+name: app
+description: Single service so the fixture has at least one target.
+
+build:
+  command: echo "build app"
+
+runtime:
+  command: echo "run app"
+  port: 3000

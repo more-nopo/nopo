@@ -1,0 +1,101 @@
+{
+  "services": [
+    "api",
+    "core"
+  ],
+  "command": "build",
+  "targets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "filteredTargets": [
+    "api"
+  ],
+  "finalTargets": [
+    "api",
+    "core"
+  ],
+  "dependencies": {
+    "api": [
+      "core"
+    ],
+    "core": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:api",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build",
+          "build:core"
+        ],
+        "target": "api",
+        "payload": {
+          "target": "api",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "build:core",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:exec"
+        },
+        "needs": [
+          "pre_build"
+        ],
+        "target": "core",
+        "payload": {
+          "target": "core",
+          "noCache": false
+        },
+        "meta": {
+          "script": "build"
+        }
+      },
+      {
+        "id": "post_build",
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post"
+        },
+        "needs": [
+          "build:api",
+          "build:core"
+        ],
+        "meta": {
+          "script": "build"
+        }
+      }
+    ]
+  }
+}

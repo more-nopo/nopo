@@ -1,0 +1,101 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`createStreamingRenderer M8 failure footer > snapshot — mixed failure + skip 1`] = `
+"━━━ stage 0 ━ 1 nodes ━━━
+[0 docker.build alpha] a-stdout
+━━━ ✘ FAILED  0:docker.build(alpha) (100ms) ━━━
+Plan finished — 0 ok, 1 failed, 1 skipped, total <wallclock>, max-parallel 1
+━━━ Failed: 0:docker.build(alpha) (100ms) ━━━
+[0 docker.build alpha] a-stdout
+─────── stage 0 ────────    ─────── stage 1 ───────
+
+┌──────────────────────┐    ┌─────────────────────┐
+│ ✘ docker.build alpha │────│ ⊘ docker.build beta │
+└──────────────────────┘    └─────────────────────┘
+"
+`;
+
+exports[`createStreamingRenderer M8 failure footer > snapshot — multiple independent failures 1`] = `
+"━━━ stage 0 ━ 2 nodes ━ parallel ━━━
+[0 docker.build alpha] a-line
+[0 docker.build beta ] b-line
+━━━ ✘ FAILED  0:docker.build(alpha) (50ms) ━━━
+━━━ ✘ FAILED  0:docker.build(beta) (80ms) ━━━
+Plan finished — 0 ok, 2 failed, 0 skipped, total <wallclock>, max-parallel 2
+━━━ Failed: 0:docker.build(alpha) (50ms) ━━━
+[0 docker.build alpha] a-line
+━━━ Failed: 0:docker.build(beta) (80ms) ━━━
+[0 docker.build beta ] b-line
+─────── stage 0 ────────
+
+┌──────────────────────┐
+│ ✘ docker.build alpha │
+└──────────────────────┘
+
+┌──────────────────────┐
+│ ✘ docker.build beta  │
+└──────────────────────┘
+"
+`;
+
+exports[`createStreamingRenderer M8 failure footer > snapshot — no failure: summary line only, no post-mortem 1`] = `
+"━━━ stage 0 ━ 1 nodes ━━━
+[0 docker.build svc] all good
+Plan finished — 1 ok, 0 failed, 0 skipped, total <wallclock>, max-parallel 1
+"
+`;
+
+exports[`createStreamingRenderer M8 failure footer > snapshot — single failure 1`] = `
+"━━━ stage 0 ━ 1 nodes ━━━
+[0 docker.build svc] a-stdout
+[0 docker.build svc] a-stderr-error
+━━━ ✘ FAILED  0:docker.build(svc) (1.2s) ━━━
+Plan finished — 0 ok, 1 failed, 0 skipped, total <wallclock>, max-parallel 1
+━━━ Failed: 0:docker.build(svc) (1.2s) ━━━
+[0 docker.build svc] a-stdout
+[0 docker.build svc] a-stderr-error
+"
+`;
+
+exports[`createStreamingRenderer snapshots > matches snapshot for a single-node sequence 1`] = `
+"━━━ stage 0 ━ 1 nodes ━━━
+[0 docker.build svc] step 1
+[0 docker.build svc] step 2
+Plan finished — 1 ok, 0 failed, 0 skipped, total <wallclock>, max-parallel 1
+"
+`;
+
+exports[`createStreamingRenderer snapshots > matches snapshot for cross-stage edge (a -> b -> c) 1`] = `
+"━━━ stage 0 ━ 1 nodes ━━━
+[0 docker.build first ] a out
+━━━ stage 1 ━ 1 nodes ━━━
+[1 docker.build second] b out
+━━━ stage 2 ━ 1 nodes ━━━
+[2 docker.build third ] c out
+Plan finished — 3 ok, 0 failed, 0 skipped, total <wallclock>, max-parallel 1
+─────── stage 0 ────────    ──────── stage 1 ────────    ─────── stage 2 ────────
+
+┌──────────────────────┐    ┌───────────────────────┐    ┌──────────────────────┐
+│ ✓ docker.build first │────│ ✓ docker.build second │────│ ✓ docker.build third │
+└──────────────────────┘    └───────────────────────┘    └──────────────────────┘
+"
+`;
+
+exports[`createStreamingRenderer snapshots > matches snapshot for parallel fan-out across two stages 1`] = `
+"━━━ stage 0 ━ 2 nodes ━ parallel ━━━
+[0 docker.build alpha] alpha-out
+[0 docker.build beta ] beta-out
+━━━ stage 1 ━ 1 nodes ━━━
+[1 host-exec gamma   ] gamma-out
+Plan finished — 3 ok, 0 failed, 0 skipped, total <wallclock>, max-parallel 2
+─────── stage 0 ────────    ────── stage 1 ──────
+
+┌──────────────────────┐    ┌───────────────────┐
+│ ✓ docker.build alpha │────│ ✓ host-exec gamma │
+└──────────────────────┘│   └───────────────────┘
+                        │
+┌──────────────────────┐│
+│ ✓ docker.build beta  │┘
+└──────────────────────┘
+"
+`;

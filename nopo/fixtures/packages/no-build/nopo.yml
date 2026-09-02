@@ -1,0 +1,18 @@
+name: No-Build Package
+description: |
+  Package fixture WITHOUT a `build` section — i.e. nothing to build,
+  no docker image, no compile artifacts. Models real workspaces like
+  type-only libraries / pure source dependencies.
+
+  Used by `build-flags.test.ts` to assert that `--changed` surfaces a
+  package even when the build pipeline has nothing to do for it (the
+  `--print` dry-run reports what changed, not what's buildable).
+
+tags:
+  - fixture-tag
+
+# No `build:` block on purpose — see description.
+
+commands:
+  test: echo "FIXTURE_NO_BUILD_TEST_SUCCESS"
+  check: echo "FIXTURE_NO_BUILD_CHECK_SUCCESS"

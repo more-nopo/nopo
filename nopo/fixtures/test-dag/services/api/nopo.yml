@@ -1,0 +1,21 @@
+name: API Service
+description: Test API service
+
+build:
+  command: echo "build api"
+  deps:
+    - types
+
+runtime:
+  command: echo "run api"
+  port: 3000
+  cpu: "1"
+  memory: "512Mi"
+  deps:
+    - db
+
+commands:
+  test:
+    command: echo "test api"
+  check:
+    command: echo "check api"

@@ -1,0 +1,20 @@
+name: Worker Service
+description: Test background worker service
+
+build:
+  command: echo "build worker"
+
+runtime:
+  command: echo "run worker"
+  port: 4000
+  cpu: "0.5"
+  memory: "256Mi"
+  deps:
+    - api
+    - db
+
+commands:
+  test:
+    command: echo "test worker"
+  check:
+    command: echo "check worker"

@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`--print reflects post-compaction plan (MT3) > --print snapshot for a multi-service docker build (compacted) 1`] = `
+{
+  "command": "build",
+  "finalTargets": [
+    "complex",
+    "custom-dockerfile",
+    "dependent",
+    "env-expand",
+    "minimal",
+    "no-build",
+    "runtime-map",
+    "secrets-flat",
+    "secrets-map",
+    "shared",
+    "utils",
+    "virtual",
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "handler": {
+          "kind": "builtin",
+          "name": "build:pre",
+        },
+        "id": "pre_build",
+        "needs": [],
+      },
+      {
+        "batchOf": [
+          "build:complex",
+          "build:custom-dockerfile",
+          "build:dependent",
+          "build:env-expand",
+          "build:minimal",
+          "build:runtime-map",
+          "build:secrets-flat",
+          "build:secrets-map",
+          "build:shared",
+          "build:utils",
+          "build:virtual",
+        ],
+        "handler": {
+          "hook": "bake",
+          "kind": "plugin-hook",
+          "plugin": "docker",
+        },
+        "id": "build:bake",
+        "needs": [
+          "pre_build",
+        ],
+      },
+      {
+        "handler": {
+          "kind": "builtin",
+          "name": "build:post",
+        },
+        "id": "post_build",
+        "needs": [
+          "build:bake",
+        ],
+      },
+    ],
+  },
+}
+`;

@@ -1,0 +1,16 @@
+name: svc-b
+
+# Map-shape runtime: explicit per-runtime overlays. The default block
+# carries scalars; the prod overlay overrides cpu and replaces the LOG
+# env value while inheriting port + the rest from default.
+runtime:
+  default:
+    command: node a.js
+    port: 3000
+    cpu: "1"
+    env:
+      LOG: info
+  prod:
+    cpu: "2"
+    env:
+      LOG: warn

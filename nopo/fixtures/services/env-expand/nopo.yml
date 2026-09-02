@@ -1,0 +1,42 @@
+name: Env Expand Fixture
+description: Fixture for testing shell-style env variable expansion in commands
+
+build:
+  command: echo "build env-expand"
+
+runtime:
+  cpu: "0.5"
+  memory: "128Mi"
+  port: 9090
+
+env:
+  # Simple default — should resolve to "192.168.1.124" when TALOS_NODE is not in process env
+  NODE_IP: "${TALOS_NODE:-192.168.1.124}"
+  # Simple expansion — should resolve to value of CUSTOM_HOST or empty
+  SIMPLE_REF: "${CUSTOM_HOST}"
+  # Unbraced expansion
+  UNBRACED: "$CUSTOM_HOST"
+  # Default-if-unset (not empty) variant
+  UNSET_ONLY: "${MAYBE_SET-fallback_value}"
+  # Cross-reference within the same env block
+  ENDPOINT: "https://${TALOS_NODE:-192.168.1.124}:6443"
+  # Plain value (no expansion needed)
+  STATIC: "plain_value"
+
+commands:
+  show-env:
+    command: echo "$NODE_IP|$SIMPLE_REF|$UNBRACED|$UNSET_ONLY|$ENDPOINT|$STATIC"
+
+  nested-env:
+    env:
+      CHILD_VAR: "${TALOS_NODE:-10.0.0.1}"
+    command: echo "$CHILD_VAR"
+
+  sub:
+    env:
+      PARENT_VAL: "${TALOS_NODE:-parent_default}"
+    commands:
+      child:
+        env:
+          CHILD_VAL: "inherited-${TALOS_NODE:-child_default}"
+        command: echo "$PARENT_VAL|$CHILD_VAL"

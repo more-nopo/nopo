@@ -1,0 +1,20 @@
+name: Nginx Proxy
+description: Test reverse proxy service
+
+build:
+  command: echo "build nginx"
+
+runtime:
+  command: echo "run nginx"
+  port: 80
+  cpu: "0.25"
+  memory: "128Mi"
+  deps:
+    - api
+    - web
+
+commands:
+  test:
+    command: echo "test nginx"
+  check:
+    command: echo "check nginx"

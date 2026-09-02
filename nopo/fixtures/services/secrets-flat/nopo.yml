@@ -1,0 +1,23 @@
+name: Secrets Flat Fixture
+description: Service with a flat-shape runtime + a baseline secret. Used for secret CLI tests.
+tags: [fixture, secrets]
+
+build:
+  command: echo "build secrets-flat"
+
+# Flat-shape runtime — auto-wrapped to `{ default: <flat> }` by the parser.
+# `secrets:` here is a structurally-valid placeholder ENC[...] so the schema
+# (`SecretCiphertextSchema` requires the `ENC[` prefix) accepts it; the
+# placeholder will NOT decrypt with any real key. Tests that exercise the
+# round-trip generate a fresh age key in a tmpdir and call `nopo secret set`
+# to overwrite this value before reading it back.
+runtime:
+  command: node server.js
+  port: 3001
+  cpu: "0.25"
+  memory: "64Mi"
+  secrets:
+    API_KEY: "ENC[AES256_GCM,placeholder-encrypt-via-nopo-secret-set,iv:0,tag:0,type:str]"
+
+commands:
+  test: echo "FIXTURE_SECRETS_FLAT_TEST_SUCCESS"

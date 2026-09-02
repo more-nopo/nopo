@@ -1,0 +1,8 @@
+name: db
+description: Database service via image — proves docker plugin skips build for image-only targets.
+image: postgres:16
+
+runtime:
+  port: 5432
+  cpu: "0.5"
+  memory: "256Mi"

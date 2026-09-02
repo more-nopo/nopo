@@ -1,0 +1,19 @@
+name: nopo
+description: Nopo CLI — service runner, plugin host, config schema
+
+commands:
+  clean: rm -rf node_modules build
+  compile: bunx --bun vite build
+  test: bunx vitest run --run
+  check:
+    commands:
+      types: bunx --bun tsc --noEmit
+
+plugins:
+  sonar:
+    projectKey: nopo-cli
+    projectName: "nopo / packages/nopo (TypeScript)"
+    sources: [src]
+    tests: [tests]
+    testInclusions: ["**/*.test.ts"]
+    exclusions: ["**/node_modules/**", "**/dist/**", "**/build/**", "**/fixtures/**"]

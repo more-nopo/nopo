@@ -1,0 +1,24 @@
+name: test-pkg-managers
+services:
+  dirs:
+    - services
+    - packages
+package_managers:
+  bun:
+    lockfile: bun.lock
+    manifest: package.json
+    requires_source: false
+    # Phase form: one command per install phase.
+    install:
+      dev: bun install
+      build: bun install --frozen-lockfile --filter './{service_dir}'
+      prod: bun install --production --frozen-lockfile --filter './{service_dir}'
+    sync: bun install --force
+    modules: node_modules
+  uv:
+    lockfile: uv.lock
+    manifest: pyproject.toml
+    # Plain-string form stays valid: every phase falls back to it.
+    install: uv sync --locked
+    sync: uv sync --reinstall
+    modules: .venv

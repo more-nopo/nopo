@@ -1,0 +1,5 @@
+name: svc-a
+
+runtime:
+  command: node server.js
+  port: 3000

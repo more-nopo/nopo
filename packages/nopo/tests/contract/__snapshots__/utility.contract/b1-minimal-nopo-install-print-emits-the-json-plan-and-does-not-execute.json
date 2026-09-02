@@ -1,0 +1,38 @@
+{
+  "services": [
+    "app"
+  ],
+  "command": "install",
+  "targets": [
+    "app"
+  ],
+  "filteredTargets": [
+    "app"
+  ],
+  "finalTargets": [
+    "app"
+  ],
+  "dependencies": {
+    "app": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "install",
+        "handler": {
+          "kind": "builtin",
+          "name": "install:run"
+        },
+        "needs": [],
+        "meta": {
+          "script": "install"
+        }
+      }
+    ]
+  }
+}

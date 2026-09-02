@@ -1,0 +1,11 @@
+name: Types Package
+description: Shared type definitions
+
+build:
+  command: echo "build types"
+
+commands:
+  test:
+    command: echo "test types"
+  check:
+    command: echo "check types"

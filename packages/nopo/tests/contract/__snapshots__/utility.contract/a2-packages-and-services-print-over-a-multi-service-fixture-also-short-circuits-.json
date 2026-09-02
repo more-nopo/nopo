@@ -1,0 +1,65 @@
+{
+  "services": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "command": "act",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "finalTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "dependencies": {
+    "api": [
+      "shared"
+    ],
+    "shared": [],
+    "utils": [
+      "shared"
+    ],
+    "web": [
+      "utils",
+      "api"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "act",
+        "handler": {
+          "kind": "builtin",
+          "name": "act:run"
+        },
+        "needs": [],
+        "payload": {
+          "event": "workflow_dispatch",
+          "verbose": false,
+          "inputs": []
+        },
+        "meta": {
+          "script": "act"
+        }
+      }
+    ]
+  }
+}

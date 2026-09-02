@@ -1,0 +1,6 @@
+name: test-dag
+
+services:
+  dirs:
+    - ./services
+    - ./packages

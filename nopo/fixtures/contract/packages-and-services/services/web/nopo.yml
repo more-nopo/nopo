@@ -1,0 +1,13 @@
+name: web
+description: Service — has runtime block. Build-depends on utils (cross-type edge).
+
+build:
+  command: echo "build web"
+  deps:
+    - utils
+
+runtime:
+  command: echo "run web"
+  port: 8080
+  deps:
+    - api

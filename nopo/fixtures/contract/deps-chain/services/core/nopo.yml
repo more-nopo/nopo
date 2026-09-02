@@ -1,0 +1,5 @@
+name: core
+description: Leaf of the build chain (A in A->B->C).
+
+build:
+  command: echo "build core"

@@ -1,0 +1,109 @@
+{
+  "services": [
+    "api",
+    "core"
+  ],
+  "command": "test:integration",
+  "targets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "core",
+    "web"
+  ],
+  "finalTargets": [
+    "api",
+    "core"
+  ],
+  "dependencies": {
+    "api": [
+      "core"
+    ],
+    "core": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    },
+    {
+      "name": "build",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:pre"
+        },
+        "needs": [],
+        "payload": {
+          "commandName": "test:integration",
+          "targets": [
+            "api",
+            "core"
+          ],
+          "stageCount": 1
+        },
+        "meta": {
+          "script": "command",
+          "phase": "pre"
+        }
+      },
+      {
+        "id": "cmd:0:api:test:integration",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:exec"
+        },
+        "needs": [
+          "pre_command"
+        ],
+        "target": "api",
+        "payload": {
+          "commandName": "test:integration",
+          "stageIndex": 0,
+          "task": {
+            "service": "api",
+            "command": "test:integration",
+            "executable": "echo \"FIXTURE_GRID_API_TEST_INTEGRATION\"",
+            "context": "container"
+          }
+        },
+        "meta": {
+          "script": "command",
+          "phase": "exec",
+          "stage": 0,
+          "command": "test:integration"
+        }
+      },
+      {
+        "id": "post_command",
+        "handler": {
+          "kind": "builtin",
+          "name": "command:post"
+        },
+        "needs": [
+          "cmd:0:api:test:integration"
+        ],
+        "payload": {
+          "commandName": "test:integration"
+        },
+        "meta": {
+          "script": "command",
+          "phase": "post"
+        }
+      }
+    ]
+  }
+}

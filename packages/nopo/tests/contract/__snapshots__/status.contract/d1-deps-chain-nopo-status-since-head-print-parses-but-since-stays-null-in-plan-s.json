@@ -1,0 +1,93 @@
+{
+  "services": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "command": "status",
+  "targets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "core",
+    "lib",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "core": [],
+    "lib": [
+      "core"
+    ],
+    "web": [
+      "lib"
+    ],
+    "worker": [
+      "web"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:main"
+        },
+        "needs": [
+          "pre_status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "post_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:post"
+        },
+        "needs": [
+          "status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      }
+    ]
+  }
+}

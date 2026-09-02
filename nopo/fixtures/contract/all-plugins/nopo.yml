@@ -1,0 +1,45 @@
+name: contract-all-plugins
+
+services:
+  dirs:
+    - ./services
+
+# All six built-in plugins, resolved by short name to the workspace package
+# `@more-nopo/nopo-plugin-<name>`. Order is the registration order — tests assert
+# this matches the order plugins appear in `runner.plugins[]` and therefore
+# the order their additive hooks (preBuild/postBuild/etc) fire in.
+#
+# Override-slot ownership (per RFC §7-8 / current built-in defaults):
+#   - docker          : build, push (image build)
+#   - docker-compose  : up, down, status, logs, shell, run (local-dev runtime)
+#   - terraform       : up, down, status (cluster runtime — selected via runtimes:)
+#   - playwright      : test (smoketest / e2e)
+#   - diff            : print, list (read-only diff against base ref)
+#   - docs            : docs (mkdocs-style site)
+#
+# Two plugins each claim `up`/`down`/`status` (docker-compose + terraform);
+# the runtimes: map below disambiguates by name.
+plugins:
+  - name: docker
+    config: {}
+  - name: docker-compose
+    config: {}
+  - name: terraform
+    config: {}
+  - name: playwright
+    config: {}
+  - name: diff
+    config: {}
+  - name: docs
+    config:
+      title: contract-all-plugins
+      url: https://example.test
+      baseUrl: /
+      include:
+        - ./services
+
+# Runtime -> plugin map disambiguates the up/down/status conflict between
+# docker-compose and terraform.
+runtimes:
+  default: docker-compose
+  prod: terraform

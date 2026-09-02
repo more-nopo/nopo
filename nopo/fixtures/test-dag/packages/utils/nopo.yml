@@ -1,0 +1,13 @@
+name: Utils Package
+description: Shared utility functions
+
+build:
+  command: echo "build utils"
+  deps:
+    - types
+
+commands:
+  test:
+    command: echo "test utils"
+  check:
+    command: echo "check utils"

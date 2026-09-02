@@ -1,0 +1,51 @@
+{
+  "services": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "command": "env",
+  "targets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "api": [],
+    "web": [],
+    "worker": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [
+    "dev-plugin",
+    "prod-plugin"
+  ],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "env",
+        "handler": {
+          "kind": "builtin",
+          "name": "env:apply"
+        },
+        "needs": [],
+        "meta": {
+          "script": "env"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+name: contract-commands-grid
+
+services:
+  dirs:
+    - ./services

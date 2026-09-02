@@ -1,0 +1,13 @@
+name: UI Package
+description: Shared UI component library
+
+build:
+  command: echo "build ui"
+  deps:
+    - types
+
+commands:
+  test:
+    command: echo "test ui"
+  check:
+    command: echo "check ui"

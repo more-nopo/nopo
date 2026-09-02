@@ -1,0 +1,18 @@
+name: Virtual Package
+description: Package using virtual Dockerfile (no physical Dockerfile)
+
+# No dockerfile - uses virtual inline Dockerfile
+build:
+  command: echo "Building virtual package"
+  output:
+    - dist
+    - lib
+  packages:
+    - curl
+  env:
+    NODE_ENV: production
+    BUILD_FLAG: enabled
+
+commands:
+  test: echo "FIXTURE_VIRTUAL_TEST_SUCCESS"
+  check: echo "FIXTURE_VIRTUAL_CHECK_SUCCESS"

@@ -1,0 +1,14 @@
+name: api
+description: API service — used by docker (build), docker-compose/terraform (runtime), playwright (test target).
+
+build:
+  command: echo "build api"
+
+runtime:
+  command: echo "run api"
+  port: 3000
+  cpu: "0.5"
+  memory: "256Mi"
+
+commands:
+  test: echo "FIXTURE_ALL_PLUGINS_API_TEST"

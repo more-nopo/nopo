@@ -1,0 +1,16 @@
+name: core
+description: Lib-style target — has lint + format + test, no test:integration. Build only.
+
+build:
+  command: echo "build core"
+
+commands:
+  lint:
+    command: echo "FIXTURE_GRID_CORE_LINT"
+    context: host
+  format:
+    command: echo "FIXTURE_GRID_CORE_FORMAT"
+    context: host
+  test:
+    command: echo "FIXTURE_GRID_CORE_TEST"
+    context: host

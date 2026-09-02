@@ -1,0 +1,78 @@
+{
+  "services": [
+    "shared"
+  ],
+  "command": "status",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "finalTargets": [
+    "shared"
+  ],
+  "dependencies": {
+    "shared": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:main"
+        },
+        "needs": [
+          "pre_status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      },
+      {
+        "id": "post_status",
+        "handler": {
+          "kind": "builtin",
+          "name": "status:post"
+        },
+        "needs": [
+          "status"
+        ],
+        "meta": {
+          "script": "status",
+          "runtime": "default"
+        }
+      }
+    ]
+  }
+}

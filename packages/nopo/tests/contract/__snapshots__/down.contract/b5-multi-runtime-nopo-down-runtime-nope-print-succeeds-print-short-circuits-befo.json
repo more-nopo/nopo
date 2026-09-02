@@ -1,0 +1,85 @@
+{
+  "services": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "command": "down",
+  "targets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "filteredTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "finalTargets": [
+    "api",
+    "web",
+    "worker"
+  ],
+  "dependencies": {
+    "api": [],
+    "web": [],
+    "worker": []
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [
+    "dev-plugin",
+    "prod-plugin"
+  ],
+  "scriptDependencies": [
+    {
+      "name": "env",
+      "enabled": true
+    }
+  ],
+  "plan": {
+    "nodes": [
+      {
+        "id": "pre_down",
+        "handler": {
+          "kind": "builtin",
+          "name": "down:pre"
+        },
+        "needs": [],
+        "meta": {
+          "script": "down",
+          "runtime": "nope"
+        }
+      },
+      {
+        "id": "down",
+        "handler": {
+          "kind": "builtin",
+          "name": "down:main"
+        },
+        "needs": [
+          "pre_down"
+        ],
+        "meta": {
+          "script": "down",
+          "runtime": "nope"
+        }
+      },
+      {
+        "id": "post_down",
+        "handler": {
+          "kind": "builtin",
+          "name": "down:post"
+        },
+        "needs": [
+          "down"
+        ],
+        "meta": {
+          "script": "down",
+          "runtime": "nope"
+        }
+      }
+    ]
+  }
+}

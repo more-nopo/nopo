@@ -1,0 +1,53 @@
+{
+  "_comment": "Case 2 (rewritten per M5 follow-up): `nopo command check` over 8 workspaces with a realistic per-task inner DAG. Each workspace runs typecheck -> lint -> test, with each step only depending on its OWN previous step (no per-stage gate fan-in). This makes edge crossings measurements meaningful: the original CommandScript fan-in (every lint needing every typecheck) was an artifact of how stage gates were modeled, not the true dependency structure. Topology: pre_command -> [typecheck x 8 workspaces in parallel] -> [lint x 8, each gated on its own typecheck] -> [test x 8, each gated on its own lint] -> post_command (fan-in from all 8 tests).",
+  "nodes": [
+    {
+      "id": "pre_command",
+      "handler": { "kind": "builtin", "name": "command:pre" },
+      "needs": [],
+      "payload": {
+        "commandName": "check",
+        "targets": ["nopo", "ui", "web", "api", "auth", "worker", "broker", "router"],
+        "stageCount": 3
+      },
+      "meta": { "script": "command", "phase": "pre" }
+    },
+
+    { "id": "cmd:0:nopo:typecheck",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "nopo",   "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:ui:typecheck",     "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "ui",     "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:web:typecheck",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "web",    "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:api:typecheck",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "api",    "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:auth:typecheck",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "auth",   "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:worker:typecheck", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "worker", "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:broker:typecheck", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "broker", "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+    { "id": "cmd:0:router:typecheck", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["pre_command"], "target": "router", "meta": { "script": "command", "phase": "exec", "stage": 0, "command": "typecheck" } },
+
+    { "id": "cmd:1:nopo:lint",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:nopo:typecheck"],   "target": "nopo",   "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:ui:lint",     "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:ui:typecheck"],     "target": "ui",     "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:web:lint",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:web:typecheck"],    "target": "web",    "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:api:lint",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:api:typecheck"],    "target": "api",    "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:auth:lint",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:auth:typecheck"],   "target": "auth",   "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:worker:lint", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:worker:typecheck"], "target": "worker", "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:broker:lint", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:broker:typecheck"], "target": "broker", "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+    { "id": "cmd:1:router:lint", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:0:router:typecheck"], "target": "router", "meta": { "script": "command", "phase": "exec", "stage": 1, "command": "lint" } },
+
+    { "id": "cmd:2:nopo:test",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:nopo:lint"],   "target": "nopo",   "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:ui:test",     "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:ui:lint"],     "target": "ui",     "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:web:test",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:web:lint"],    "target": "web",    "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:api:test",    "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:api:lint"],    "target": "api",    "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:auth:test",   "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:auth:lint"],   "target": "auth",   "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:worker:test", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:worker:lint"], "target": "worker", "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:broker:test", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:broker:lint"], "target": "broker", "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+    { "id": "cmd:2:router:test", "handler": { "kind": "builtin", "name": "command:exec" }, "needs": ["cmd:1:router:lint"], "target": "router", "meta": { "script": "command", "phase": "exec", "stage": 2, "command": "test" } },
+
+    {
+      "id": "post_command",
+      "handler": { "kind": "builtin", "name": "command:post" },
+      "needs": [
+        "cmd:2:nopo:test", "cmd:2:ui:test", "cmd:2:web:test", "cmd:2:api:test",
+        "cmd:2:auth:test", "cmd:2:worker:test", "cmd:2:broker:test", "cmd:2:router:test"
+      ],
+      "meta": { "script": "command", "phase": "post" }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+name: web
+description: Web frontend — exercises docker build + docker-compose up + playwright smoketest target.
+
+build:
+  command: echo "build web"
+
+runtime:
+  command: echo "run web"
+  port: 8080
+  cpu: "0.5"
+  memory: "256Mi"
+  deps:
+    - api
+
+commands:
+  test: echo "FIXTURE_ALL_PLUGINS_WEB_TEST"

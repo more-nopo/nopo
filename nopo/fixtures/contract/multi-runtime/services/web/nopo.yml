@@ -1,0 +1,26 @@
+name: web
+description: Service with map-shape runtime — prod overlay overrides cpu/memory + bumps replicas via env.
+tags: [overlay]
+
+build:
+  command: echo "build web"
+
+# Map-shape runtime: default + prod overlay. `default` is required.
+# Tests assert that `--runtime prod` resolves cpu="2" / memory="1Gi"
+# while `--runtime` (or no flag, the default) resolves cpu="0.5" /
+# memory="256Mi".
+runtime:
+  default:
+    command: echo "run web (dev)"
+    port: 8080
+    cpu: "0.5"
+    memory: "256Mi"
+    env:
+      LOG_LEVEL: debug
+      MODE: dev
+  prod:
+    cpu: "2"
+    memory: "1Gi"
+    env:
+      LOG_LEVEL: warn
+      MODE: prod

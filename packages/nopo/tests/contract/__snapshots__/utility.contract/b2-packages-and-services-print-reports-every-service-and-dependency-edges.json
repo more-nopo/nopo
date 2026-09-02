@@ -1,0 +1,60 @@
+{
+  "services": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "command": "install",
+  "targets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "filteredTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "finalTargets": [
+    "api",
+    "shared",
+    "utils",
+    "web"
+  ],
+  "dependencies": {
+    "api": [
+      "shared"
+    ],
+    "shared": [],
+    "utils": [
+      "shared"
+    ],
+    "web": [
+      "utils",
+      "api"
+    ]
+  },
+  "dependants": [],
+  "filters": [],
+  "since": null,
+  "plugins": [],
+  "scriptDependencies": [],
+  "plan": {
+    "nodes": [
+      {
+        "id": "install",
+        "handler": {
+          "kind": "builtin",
+          "name": "install:run"
+        },
+        "needs": [],
+        "meta": {
+          "script": "install"
+        }
+      }
+    ]
+  }
+}

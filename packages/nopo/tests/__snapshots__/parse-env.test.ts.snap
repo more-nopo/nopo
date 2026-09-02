@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseEnv > should parse the env 1`] = `
+{
+  "DOCKER_DIGEST": "",
+  "DOCKER_IMAGE": "nopo",
+  "DOCKER_REGISTRY": "",
+  "DOCKER_TAG": "nopo:local",
+  "DOCKER_TARGET": "development",
+  "DOCKER_VERSION": "local",
+  "NODE_ENV": "development",
+}
+`;
