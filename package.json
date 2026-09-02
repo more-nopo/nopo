@@ -7,7 +7,8 @@
   "license": "GPL-3.0-only",
   "workspaces": [
     "packages/nopo",
-    "nopo/plugins/*"
+    "nopo/plugins/*",
+    "nopo/plugins/docs/site"
   ],
   "scripts": {
     "postinstall": "cd packages/nopo && (bun unlink 2>/dev/null || true) && bun link"
