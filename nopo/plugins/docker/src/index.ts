@@ -1798,7 +1798,10 @@ export function generateRuntimeCopyLines(args: {
  * `resolveCommandDag` primitive. Installs are emitted separately by `generatePackageManagerInstalls`,
  * BEFORE the full source COPY in `generateInlineDockerfile`, so the install layer caches on lockfile
  */
-export function generateBuildRunLines(service: BuildableService): string[] {
+export function generateBuildRunLines(
+  service: BuildableService,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
   const rawCommand = service.build.command;
   if (rawCommand === undefined) return [];
 
@@ -1816,8 +1819,9 @@ export function generateBuildRunLines(service: BuildableService): string[] {
     command = rawCommand.trim();
   }
 
+  const mount = ghprInstallSecretMount(env);
   if (forceHeredoc || command.includes("\n")) {
-    return ["RUN <<'EOF'", "set -e", command, "EOF"];
+    return [`RUN ${mount}<<'EOF'`, "set -e", command, "EOF"];
   }
-  return [`RUN ${command}`];
+  return [`RUN ${mount}${command}`];
 }
