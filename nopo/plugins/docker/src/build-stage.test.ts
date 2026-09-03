@@ -252,6 +252,35 @@ describe("generateBuildRunLines — legacy string build.command", () => {
     ]);
   });
 
+  it("mounts NODE_AUTH_TOKEN on heredoc build commands", () => {
+    const service = makeService({
+      build: { deps: [], command: "bun install --frozen-lockfile\nmake" },
+    });
+    expect(
+      generateBuildRunLines(service, {
+        NODE_AUTH_TOKEN: "test-secret-minimum-32-characters",
+      }),
+    ).toEqual([
+      "RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN <<'EOF'",
+      "set -e",
+      "bun install --frozen-lockfile\nmake",
+      "EOF",
+    ]);
+  });
+
+  it("mounts NODE_AUTH_TOKEN on one-line build commands", () => {
+    const service = makeService({
+      build: { deps: [], command: "make all" },
+    });
+    expect(
+      generateBuildRunLines(service, {
+        NODE_AUTH_TOKEN: "test-secret-minimum-32-characters",
+      }),
+    ).toEqual([
+      "RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN make all",
+    ]);
+  });
+
   it("emits nothing when build.command is undefined", () => {
     const service = makeService({
       build: { deps: [], command: undefined },
