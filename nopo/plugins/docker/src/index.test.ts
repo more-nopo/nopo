@@ -85,6 +85,24 @@ describe("buildServiceBakeTarget", () => {
       expect(result["dockerfile-inline"]).toBeUndefined();
     });
 
+    it("attaches a GHPR bake secret when NODE_AUTH_TOKEN is set", () => {
+      process.env.NODE_AUTH_TOKEN = "test-secret-minimum-32-characters";
+      try {
+        const service = makeService({
+          build: { dockerfile: "Dockerfile" },
+        });
+        const result = buildServiceBakeTarget(
+          makeInput({ service }),
+          mockInlineGenerator,
+        );
+        expect(result.secret).toEqual([
+          { id: "node_auth_token", env: "NODE_AUTH_TOKEN" },
+        ]);
+      } finally {
+        delete process.env.NODE_AUTH_TOKEN;
+      }
+    });
+
     it("does not include root context (standalone image)", () => {
       const service = makeService({
         build: { dockerfile: "Dockerfile.custom" },
