@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-docker
 
+## 0.0.3
+
+### Patch Changes
+
+- 8fbc926: Mount NODE_AUTH_TOKEN on build-command RUN lines, including heredocs.
+
 ## 0.0.2
 
 ### Patch Changes
