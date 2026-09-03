@@ -32,7 +32,29 @@ const COMMON_ROOT_FILES = [
   "tsconfig.json",
   "tsconfig.base.json",
   "nopo.yml",
+  ".npmrc",
 ];
+
+/** BuildKit secret id matching bake `secret[].id` and Dockerfile `--mount=id=`. */
+export const NODE_AUTH_SECRET_ID = "node_auth_token";
+
+/** Prefix for `RUN` so bun can expand `.npmrc` `${NODE_AUTH_TOKEN}` inside the build. */
+export function ghprInstallSecretMount(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (!env.NODE_AUTH_TOKEN) return "";
+  return `--mount=type=secret,id=${NODE_AUTH_SECRET_ID},env=NODE_AUTH_TOKEN `;
+}
+
+/** Bake `secret` field. Omit when the token is unset so local builds stay unchanged. */
+export function ghprBakeSecretField(
+  env: NodeJS.ProcessEnv = process.env,
+): { secret: Array<{ id: string; env: string }> } | Record<string, never> {
+  if (!env.NODE_AUTH_TOKEN) return {};
+  return {
+    secret: [{ id: NODE_AUTH_SECRET_ID, env: "NODE_AUTH_TOKEN" }],
+  };
+}
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === "string");
@@ -272,6 +294,7 @@ interface BakeTarget {
   "cache-to"?: string[];
   output?: string[];
   platforms?: string[];
+  secret?: Array<{ id: string; env: string }>;
 }
 
 interface BakeDefinition {
@@ -504,6 +527,7 @@ export function buildServiceBakeTarget(
       ...(input.output ?? {}),
       ...(input.platforms ? { platforms: input.platforms } : {}),
       ...(input.cache ?? {}),
+      ...ghprBakeSecretField(),
       args: {
         SERVICE_NAME: target,
         NOPO_GIT_SHA: gitSha,
@@ -529,6 +553,7 @@ export function buildServiceBakeTarget(
     ...(input.output ?? {}),
     ...(input.platforms ? { platforms: input.platforms } : {}),
     ...(input.cache ?? {}),
+    ...ghprBakeSecretField(),
     contexts: {
       [rootName]: `target:${rootName}`,
       // The `info` stage alone, so the runtime stage can pull
@@ -911,6 +936,7 @@ class DockerBuilder {
           push,
           isCI,
         }),
+        ...ghprBakeSecretField(),
         args: {
           ...rootArgs,
           DOCKER_TARGET: env.DOCKER_TARGET,
@@ -1660,6 +1686,7 @@ export function generatePackageManagerInstalls(
     requiresSource: boolean;
     phase: InstallPhase;
     serviceDir: string;
+    env?: NodeJS.ProcessEnv;
   },
 ): string[] {
   if (!service.packageManagers || service.packageManagers.length === 0) {
@@ -1683,7 +1710,7 @@ export function generatePackageManagerInstalls(
      * of api's install layer. bun hardlinks cache->node_modules, so no bytes are lost.
      */
     lines.push(
-      `RUN cd ${containerCwd} && ${command}${installCacheCleanup(pm)}`,
+      `RUN ${ghprInstallSecretMount(options.env)}cd ${containerCwd} && ${command}${installCacheCleanup(pm)}`,
     );
   }
   return lines;
@@ -1698,6 +1725,7 @@ export function generateRuntimeInstallLines(
   service: BuildableService,
   rootDir: string,
   serviceDir: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): string[] {
   if (!service.packageManagers || service.packageManagers.length === 0) {
     return [];
@@ -1712,7 +1740,9 @@ export function generateRuntimeInstallLines(
       !rel || rel === "."
         ? `$\${APP}`
         : `$\${APP}/${rel.split(path.sep).join("/")}`;
-    lines.push(`RUN cd ${containerCwd} && ${prod}${installCacheCleanup(pm)}`);
+    lines.push(
+      `RUN ${ghprInstallSecretMount(env)}cd ${containerCwd} && ${prod}${installCacheCleanup(pm)}`,
+    );
   }
   return lines;
 }

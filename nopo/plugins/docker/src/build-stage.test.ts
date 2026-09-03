@@ -15,6 +15,8 @@ import {
   generatePackageManagerInstalls,
   generateRuntimeCopyLines,
   generateRuntimeInstallLines,
+  ghprBakeSecretField,
+  ghprInstallSecretMount,
   groupInstallTimeFilesByDir,
   pushImageOutput,
 } from "./index.ts";
@@ -96,6 +98,37 @@ describe("generatePackageManagerInstalls", () => {
         serviceDir: "services/svc",
       }),
     ).toEqual([`RUN cd $\${APP} && bun install --frozen-lockfile`]);
+  });
+
+  it("mounts NODE_AUTH_TOKEN as a BuildKit secret on bun install", () => {
+    const service = makeService({
+      packageManagers: [pm({ cwd: ROOT_DIR, requires_source: false })],
+    });
+    expect(
+      generatePackageManagerInstalls(service, ROOT_DIR, {
+        requiresSource: false,
+        phase: "build",
+        serviceDir: "services/svc",
+        env: { NODE_AUTH_TOKEN: "test-secret-minimum-32-characters" },
+      }),
+    ).toEqual([
+      `RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN cd $\${APP} && bun install --frozen-lockfile`,
+    ]);
+  });
+
+  it("ghpr helpers are inert without NODE_AUTH_TOKEN", () => {
+    expect(ghprInstallSecretMount({})).toBe("");
+    expect(ghprBakeSecretField({})).toEqual({});
+  });
+
+  it("ghpr bake secret reads NODE_AUTH_TOKEN from the given env", () => {
+    expect(
+      ghprBakeSecretField({
+        NODE_AUTH_TOKEN: "test-secret-minimum-32-characters",
+      }),
+    ).toEqual({
+      secret: [{ id: "node_auth_token", env: "NODE_AUTH_TOKEN" }],
+    });
   });
 
   it("translates absolute host cwd to a container path under ${APP}", () => {
@@ -368,6 +401,13 @@ describe("collectInstallTimeFiles", () => {
       "nopo.yml",
       "package.json",
     ]);
+  });
+
+  it("includes .npmrc when present so GHPR registry config reaches bun install", () => {
+    touch("package.json", JSON.stringify({ workspaces: [] }));
+    touch(".npmrc", "@more-nopo:registry=https://npm.pkg.github.com\n");
+    const files = collectInstallTimeFiles(svc(), tmpRoot);
+    expect(files).toContain(".npmrc");
   });
 
   it("includes every workspace's package.json (for workspace resolution)", () => {
