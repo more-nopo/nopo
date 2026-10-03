@@ -1,0 +1,7 @@
+name: app
+image: nginx:alpine
+runtime:
+  default:
+    port: 80
+  canary:
+    replicas: 1

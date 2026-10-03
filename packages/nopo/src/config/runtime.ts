@@ -286,6 +286,7 @@ export const RuntimeBlockSchema = z
     secrets: RuntimeSecretsSchema.optional(),
     deps: z.array(z.string().min(1)).optional(),
     processes: RuntimeProcessesSchema.optional(),
+    inherit_secrets: z.boolean().optional(),
     /**
      * Unified probe definition. Drives the docker-compose `healthcheck:`
      * block and the k8s `readinessProbe` (terraform plugin). See
@@ -584,8 +585,11 @@ export function mergeRuntimeBlock(
   if (overlay.env !== undefined) {
     out.env = { ...(base.env ?? {}), ...overlay.env };
   }
-  if (overlay.secrets !== undefined) {
-    out.secrets = { ...(base.secrets ?? {}), ...overlay.secrets };
+  if (overlay.secrets !== undefined || overlay.inherit_secrets === false) {
+    out.secrets = {
+      ...(overlay.inherit_secrets === false ? {} : (base.secrets ?? {})),
+      ...overlay.secrets,
+    };
   }
   if (overlay.processes !== undefined) {
     const baseProc = base.processes ?? {};
@@ -663,7 +667,7 @@ export function resolveRuntime(
   // 4-layer precedence (last wins): (1) default.env 2. default.secret 3. <name>.env 4.
   // <name>.secret Same key in env+secret of same runtime: secret wins
   const defEnv = def.env ?? {};
-  const defSecret = def.secrets ?? {};
+  const defSecret = named.inherit_secrets === false ? {} : (def.secrets ?? {});
   const namedEnv = named.env ?? {};
   const namedSecret = named.secrets ?? {};
 

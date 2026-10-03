@@ -437,10 +437,23 @@ const PluginReferenceSchema = z.object({
  * plugin: <string> }`). Full form: `runtimes: { default: docker-compose, preview: {
  * plugin: terraform, namespace: nopo-prev } }` The simple form is the pass-through:
  */
-const RuntimeEntrySchema = z.object({
-  plugin: z.string().min(1),
-  namespace: z.string().min(1).optional(),
-});
+const RuntimeEntrySchema = z
+  .object({
+    plugin: z.string().min(1),
+    namespace: z.string().min(1).optional(),
+    preserveNamespace: z.boolean().optional(),
+    requireOverlay: z.boolean().optional(),
+    priorityClassName: z
+      .string()
+      .max(253)
+      .regex(
+        /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/,
+      )
+      .optional(),
+  })
+  .refine((entry) => !entry.preserveNamespace || Boolean(entry.namespace), {
+    message: "preserveNamespace requires an explicit namespace",
+  });
 
 export type RuntimeEntry = z.infer<typeof RuntimeEntrySchema>;
 
@@ -456,12 +469,12 @@ const RuntimesMapSchema = z
       "runtimes: must declare a `default:` entry. Each entry maps a runtime name to a registered plugin (e.g. runtimes: { default: docker-compose, prod: terraform }).",
   })
   .transform((m) => {
-    const out: Record<string, { plugin: string; namespace?: string }> = {};
+    const out: Record<string, RuntimeEntry> = {};
     for (const [name, value] of Object.entries(m)) {
       if (typeof value === "string") {
         out[name] = { plugin: value };
       } else {
-        out[name] = { plugin: value.plugin, namespace: value.namespace };
+        out[name] = value;
       }
     }
     return out;
@@ -842,7 +855,7 @@ export interface NormalizedProjectConfig {
    * use `resolveRuntimePlugin()` to pick the right plugin and `resolveRuntimeNamespace()` to
    * derive the namespace.
    */
-  runtimes?: Record<string, { plugin: string; namespace?: string }>;
+  runtimes?: Record<string, RuntimeEntry>;
   /** Project-level package manager definitions (keyed by name) */
   packageManagers: Record<string, PackageManagerConfig>;
 }

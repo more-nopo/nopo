@@ -19,7 +19,11 @@ import {
 } from "@more-nopo/nopo/config";
 import { expandEnvValues } from "@more-nopo/nopo/expand-env";
 import { chalk } from "@more-nopo/nopo/lib";
-import type { HookContext, NopoPluginFactory, RunContext } from "@more-nopo/nopo/plugin";
+import type {
+  HookContext,
+  NopoPluginFactory,
+  RunContext,
+} from "@more-nopo/nopo/plugin";
 import {
   decryptValue,
   isEnvelope,
@@ -352,7 +356,26 @@ export class K8sDeployer {
    * globalDefault `workload` class). Threaded into every Deployment's opts.
    */
   private get podPriorityClassName(): string | null {
-    return this.isPreviewNamespace ? "nopo-preview" : null;
+    return (
+      this.runtimePolicy?.priorityClassName ??
+      (this.isPreviewNamespace ? "nopo-preview" : null)
+    );
+  }
+
+  private get runtimePolicy() {
+    return this.project.runtimes?.[this.ctx.runtime];
+  }
+
+  private get preserveNamespace(): boolean {
+    return (
+      this.isPreviewNamespace || this.runtimePolicy?.preserveNamespace === true
+    );
+  }
+
+  private get requireOverlay(): boolean {
+    return (
+      this.isPreviewNamespace || this.runtimePolicy?.requireOverlay === true
+    );
   }
 
   private get namespace(): string {
@@ -766,9 +789,9 @@ export class K8sDeployer {
   async down(): Promise<void> {
     this.log("Tearing down local Kubernetes deployment...");
 
-    if (this.isPreviewNamespace) {
+    if (this.preserveNamespace) {
       this.log(
-        `Preview namespace '${this.namespace}' — deleting workloads but ` +
+        `Reserved namespace '${this.namespace}' — deleting workloads but ` +
           "keeping the namespace (shell holds RBAC Role, ResourceQuota, PriorityClass).",
       );
       await this.downWorkloadsOnly();
@@ -790,14 +813,29 @@ export class K8sDeployer {
    * cycles.
    */
   private async downWorkloadsOnly(): Promise<void> {
-    for (const kind of PREVIEW_DOWN_RESOURCE_KINDS) {
+    const strict = this.runtimePolicy?.preserveNamespace === true;
+    const kinds = strict
+      ? [
+          "deployment",
+          "job",
+          "pod",
+          ...PREVIEW_DOWN_RESOURCE_KINDS.filter(
+            (kind) => kind !== "deployment",
+          ),
+        ]
+      : PREVIEW_DOWN_RESOURCE_KINDS;
+    let failed = false;
+    for (const kind of kinds) {
       try {
         await this
           .shell`kubectl delete ${kind} --all -n ${this.namespace} --ignore-not-found`;
       } catch (err) {
+        failed = true;
         this.log(`Warning: Failed to delete ${kind}s:`, err);
       }
     }
+    if (strict && failed)
+      throw new Error(`Workload cleanup failed in ${this.namespace}`);
   }
 
   async status(): Promise<void> {
@@ -856,6 +894,10 @@ export class K8sDeployer {
   }
 
   private async ensureNamespace(): Promise<void> {
+    if (this.runtimePolicy?.preserveNamespace) {
+      await this.quietShell`kubectl get namespace ${this.namespace}`;
+      return;
+    }
     this.log(`Ensuring namespace '${this.namespace}' exists...`);
     const nsYaml = yamlNamespace(this.namespace);
     const tmpPath = this.writeTempFile("namespace.yaml", nsYaml);
@@ -886,7 +928,14 @@ export class K8sDeployer {
        * before the plugin runs, so those platform services arrive in `targetSet`; filter them out by overlay
        * opt-in so the preview doesn't clone the whole nopo-prod stack (and blow the namespace
        */
-      if (this.isPreviewNamespace && !optsIntoPreview(service)) continue;
+      if (
+        this.requireOverlay &&
+        !Object.prototype.hasOwnProperty.call(
+          service.runtimes,
+          this.runtimePolicy?.requireOverlay ? this.ctx.runtime : "preview",
+        )
+      )
+        continue;
       /** CLI-only control-plane services (dns-tf, payments-tf): no build
        * AND no image, so there is nothing to run as a workload. Skip them so
        * the deploy doesn't synthesize a Deployment that pulls a nonexistent
