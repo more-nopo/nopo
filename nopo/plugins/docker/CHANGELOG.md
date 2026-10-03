@@ -1,5 +1,12 @@
 # @more-nopo/nopo-plugin-docker
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [40bf835]
+  - @more-nopo/nopo@0.0.2
+
 ## 0.0.3
 
 ### Patch Changes
