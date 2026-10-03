@@ -1,0 +1,13 @@
+name: canary-contract
+services:
+  dirs: [./services]
+plugins:
+  - name: terraform
+runtimes:
+  default: terraform
+  canary:
+    plugin: terraform
+    namespace: nopo-canary
+    preserveNamespace: true
+    priorityClassName: nopo-canary
+    requireOverlay: true

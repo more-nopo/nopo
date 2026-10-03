@@ -16,6 +16,45 @@ import {
   VolumeSchema,
 } from "../src/config/runtime.ts";
 
+describe("independent runtime credentials", () => {
+  it("excludes default secrets when the named runtime opts out", () => {
+    const runtime = RuntimeMapSchema.parse({
+      default: {
+        secrets: { PROVIDER_KEY: "ENC[production]" },
+        command: "start",
+      },
+      canary: {
+        inherit_secrets: false,
+        secrets: { DATABASE_URL: "ENC[canary]" },
+      },
+    });
+    const resolved = resolveRuntime(runtime, "canary");
+    expect(resolved.envs.secrets).toEqual({ DATABASE_URL: "ENC[canary]" });
+    expect(resolved.envs.effective.PROVIDER_KEY).toBeUndefined();
+    expect(resolved.command).toBe("start");
+    expect(mergeRuntimeBlock(runtime.default, runtime.canary!).secrets).toEqual(
+      { DATABASE_URL: "ENC[canary]" },
+    );
+  });
+
+  it("allows an independent runtime with no credentials", () => {
+    const runtime = RuntimeMapSchema.parse({
+      default: { secrets: { TOKEN: "ENC[production]" } },
+      canary: { inherit_secrets: false },
+    });
+    expect(resolveRuntime(runtime, "canary").envs.secrets).toEqual({});
+    expect(resolveRuntime(runtime, "default").envs.secrets.TOKEN).toBe(
+      "ENC[production]",
+    );
+  });
+
+  it("rejects a non-boolean inheritance policy", () => {
+    expect(
+      RuntimeBlockSchema.safeParse({ inherit_secrets: "false" }).success,
+    ).toBe(false);
+  });
+});
+
 describe("HealthcheckSchema — discriminated union on `type`", () => {
   // Discriminated union on `type`. `exec`: argv probe (compose CMD; k8s
   // exec.command). `http`: path + optional port (compose curl mount; k8s httpGet).

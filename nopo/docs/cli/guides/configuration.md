@@ -60,6 +60,8 @@ WEB_IMAGE=registry.com/web:v1.0.0
 
 ## Build Configuration
 
+See [reserved Kubernetes environments](reserved-environments.md) for canary namespace and credential policies.
+
 ### Cache Strategy
 
 | Environment | Cache Type           |

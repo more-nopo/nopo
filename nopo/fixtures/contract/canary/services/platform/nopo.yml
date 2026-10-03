@@ -1,0 +1,5 @@
+name: platform
+image: redis:7
+runtime:
+  default:
+    port: 6379
