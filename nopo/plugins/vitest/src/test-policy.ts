@@ -88,7 +88,7 @@ function quarantineFiles(root: string, manifest: string): string[] {
       throw new Error(
         `[vitest] Quarantined file is outside the target: ${file}`,
       );
-    return absolute;
+    return path.resolve(root, file);
   });
 }
 
@@ -109,6 +109,9 @@ function policyConfig(
     "dist/node/index.js",
   );
   const defaults = require.resolve("vitest/config");
+  const aliases = [
+    ...new Set(files.flatMap((file) => [file, realpathSync(file)])),
+  ];
   const file = path.join(directory, `${phase}.mjs`);
   writeFileSync(
     file,
@@ -120,7 +123,7 @@ export default async env => {
   if (${JSON.stringify(Boolean(native))} && !loaded) throw new Error('Cannot load native Vitest config');
   const config = loaded?.config ?? {};
   if (config.test?.projects || config.test?.workspace) throw new Error('Quarantine requires a single native project config');
-  const files = ${JSON.stringify(files)};
+  const files = ${JSON.stringify(aliases)};
   const test = ${JSON.stringify(phase)} === 'gate'
     ? { exclude: [...(config.test?.exclude ?? configDefaults.exclude), ...files] }
     : { include: files };
@@ -186,7 +189,11 @@ export async function runWithPolicy(
       const rows = z
         .array(z.object({ file: z.string() }))
         .parse(JSON.parse(readFileSync(report, "utf8")));
-      return rows.map((row) => path.resolve(root, row.file));
+      return [
+        ...new Set(
+          rows.map((row) => realpathSync(path.resolve(root, row.file))),
+        ),
+      ];
     };
     const shard = shardSelection(native.args);
     let gateArgs: string[] | null = native.args;
@@ -235,7 +242,7 @@ export async function runWithPolicy(
       .parse(JSON.parse(readFileSync(output, "utf8")));
     const statuses = new Map(
       report.testResults.map((row) => [
-        path.resolve(root, row.name),
+        realpathSync(path.resolve(root, row.name)),
         row.status,
       ]),
     );

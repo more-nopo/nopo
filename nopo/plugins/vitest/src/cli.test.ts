@@ -414,6 +414,15 @@ describe("runner-owned test policies", async () => {
     expect(r.code, r.output).toBe(0);
     expect(r.output).toContain("still fail as expected");
   });
+  it("retains quarantine through a symlinked checkout", async () => {
+    const { root } = policyFixture();
+    const alias = root + "-alias";
+    roots.push(alias);
+    symlinkSync(root, alias, "dir");
+    const r = await run(alias, "run", "alpha");
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("still fail as expected");
+  });
   it("rejects graduation and missing entries", async () => {
     const { root, dir } = policyFixture();
     writeFileSync(
