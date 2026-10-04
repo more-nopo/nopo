@@ -209,7 +209,7 @@ describe("real nopo → Vitest CLI", () => {
       path.join(root, "apps/alpha/vitest.config.mjs"),
       "export default {test: {projects: ['other']}};",
     );
-    const result = run(root, "run", "alpha");
+    const result = run(root, "run", "alpha", "beta");
     expect(result.code, result.output).toBe(1);
     expect(result.output).toContain(
       "nested projects/workspaces are unsupported",
@@ -222,8 +222,36 @@ describe("real nopo → Vitest CLI", () => {
     expect(result.code, result.output).toBe(0);
     expect(records(root)).toHaveLength(2);
     expect(
-      records(root).every((r) => r.target === "beta" && r.cwd === root),
+      records(root).every(
+        (r) => r.target === "beta" && r.cwd === path.join(root, "apps/beta"),
+      ),
     ).toBe(true);
+  });
+  it("preserves single-target config overrides and root-only reporter settings", () => {
+    const root = fixture();
+    const dir = path.join(root, "apps/beta");
+    writeFileSync(
+      path.join(dir, "alternate.config.mjs"),
+      `
+      import base from './vitest.config.mjs';
+      export default {...base, test: {...base.test, include: ['one.test.js'],
+        reporters: ['json'], outputFile: './native-report.json'}};
+    `,
+    );
+    const result = nopo(
+      root,
+      "test",
+      "beta",
+      "--",
+      "--config",
+      "alternate.config.mjs",
+    );
+    expect(result.code, result.output).toBe(0);
+    expect(records(root).map((r) => r.file)).toEqual(["one"]);
+    const report = JSON.parse(
+      readFileSync(path.join(dir, "native-report.json"), "utf8"),
+    );
+    expect(report.numPassedTests).toBe(1);
   });
   it("runs two targets in one Vitest process with separate native projects", () => {
     const root = fixture();

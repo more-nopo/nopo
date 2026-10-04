@@ -111,12 +111,17 @@ CLI runner arguments follow configured arguments. Run-wide options such as
 reporters, coverage, and worker limits belong here or on the CLI. Per-target
 settings stay in the native Vitest config.
 
-Each selected target becomes a native project named after its nopo target ID.
+A single target runs Vitest in its own working directory using its native config.
+This preserves coverage thresholds, reporters, config-time environment, and relative
+paths. A command can pass `args: ["--config", "vitest.integration.config.ts"]` to
+select another config. Native config settings keep their normal Vitest semantics.
+
+When multiple targets are selected, each becomes a native project named after its nopo target ID.
 Its config supplies aliases, Vite plugins, test environment, setup, and test-file
 patterns. `--project=ui` can further filter the selected projects. Important native
 project semantics:
 
-- `process.cwd()` is always the nopo project root. Resolve target-local paths
+- In a multi-target run, `process.cwd()` is the nopo project root. Resolve target-local paths
   relative to config/test files or their project root.
 - Projects support a subset of root configuration. Root-only reporter/coverage
   settings in target configs are not shared-run settings; move them into the
@@ -136,8 +141,9 @@ project semantics:
 - Sharding partitions the combined selected run, rather than independently
   sharding each target. Project order does not imply test execution order.
 
-`--config`, `--root`, `--workspace`, and `--projects` cannot be forwarded because
-nopo owns that mapping. Native options such as `--project`, reporters, file/name
+`--config` can be forwarded for single-target runs. Multi-target runs reject it.
+`--root`, `--workspace`, and `--projects` cannot be forwarded because nopo owns
+the target mapping. Native options such as `--project`, reporters, file/name
 filters, coverage, and sharding can be forwarded.
 
 Native project reference: https://vitest.dev/guide/projects

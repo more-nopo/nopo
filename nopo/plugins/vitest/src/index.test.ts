@@ -160,13 +160,6 @@ describe("execution", () => {
       "--testNamePattern=a=b",
     ];
     const { ctx, exec } = context(root, [api, web], ["web"], passthrough);
-    exec.mockImplementationOnce(async (_cmd, argv) => {
-      const source = readFileSync(argv[3], "utf8");
-      expect(source).toContain(web.paths.root);
-      expect(source).not.toContain(api.paths.root);
-      expect(source).toContain('"TOKEN":"host"');
-      expect(source).toContain('"NODE_ENV":"custom"');
-    });
     await run(ctx, [], "run", {
       args: ["--reporter=dot"],
       env: { GLOBAL: "global" },
@@ -176,19 +169,19 @@ describe("execution", () => {
       expect.stringContaining("vitest.mjs"),
       "run",
       "--config",
-      expect.stringContaining("vitest.config.mjs"),
+      path.join(web.paths.root, "vitest.config.ts"),
       "--reporter=dot",
       ...passthrough,
     ]);
     expect(exec.mock.calls[0]![2]).toMatchObject({
-      cwd: root,
+      cwd: web.paths.root,
       env: {
         FROM_HOST: "host",
-        NODE_ENV: "test",
+        NODE_ENV: "custom",
+        TOKEN: "host",
         GLOBAL: "global",
       },
     });
-    expect(exec.mock.calls[0]![2].env).not.toHaveProperty("TOKEN");
   });
   it("fails preflight for missing installations without starting earlier targets", async () => {
     const root = fixture();
@@ -221,8 +214,6 @@ describe("execution", () => {
     await run(ctx, [], "list");
     expect(exec.mock.calls[0]![1].slice(1)).toEqual([
       "list",
-      "--config",
-      expect.stringContaining("vitest.config.mjs"),
       "--filesOnly",
       "--json",
     ]);
@@ -241,7 +232,7 @@ describe("execution", () => {
     ]) {
       const { ctx, exec } = context(
         root,
-        [service(root, "web", {})],
+        [service(root, "web", {}), service(root, "api", {})],
         [],
         [flag],
       );
