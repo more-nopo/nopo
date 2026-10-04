@@ -130,9 +130,15 @@ function resolveVitest(root: string): { binary: string; version: string } {
 
 // These options change which target/config is executed and belong to the plugin's
 // target mapping. All other Vitest options and file filters are forwarded verbatim.
-function validateForwardedArgs(args: readonly string[]): void {
+function validateForwardedArgs(
+  args: readonly string[],
+  singleTarget: boolean,
+): void {
   for (const arg of args) {
-    if (/^(?:--(?:root|config|workspace|projects)(?:=|\.|$)|-[cr])/.test(arg)) {
+    if (
+      /^(?:--(?:root|workspace|projects)(?:=|\.|$)|-r)/.test(arg) ||
+      (!singleTarget && /^(?:--config(?:=|$)|-c)/.test(arg))
+    ) {
       throw new Error(
         `${arg} would replace nopo's target configuration. Use plugins.vitest.config instead.`,
       );
@@ -239,7 +245,10 @@ export async function executeVitest(
   const passthrough = context.commandContext
     ? (context.argv ?? [])
     : (context.passthrough ?? []);
-  validateForwardedArgs([...project.args, ...passthrough]);
+  validateForwardedArgs(
+    [...project.args, ...passthrough],
+    targets.length === 1,
+  );
   if (!context.commandContext && args.get<boolean>("print")) {
     // No environment values, config evaluation, temporary files, or subprocesses.
     context.io.stdout.write(
@@ -266,6 +275,28 @@ export async function executeVitest(
     throw new Error(
       "The nopo Vitest plugin requires Vitest 3.2 or newer (test.projects support).",
     );
+  }
+  if (targets.length === 1) {
+    const target = targets[0]!;
+    const forwarded = [...project.args, ...passthrough];
+    const overridesConfig = forwarded.some((arg) =>
+      /^(?:--config(?:=|$)|-c)/.test(arg),
+    );
+    context.io.stderr.write(`[vitest] Target: ${target.id}\n`);
+    await spawnVitest(
+      context,
+      installation.binary,
+      [
+        mode,
+        ...(target.config && !overridesConfig
+          ? ["--config", target.config]
+          : []),
+        ...forwarded,
+      ],
+      target.root,
+      { ...baseEnv, ...target.env },
+    );
+    return;
   }
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-"));
   try {
