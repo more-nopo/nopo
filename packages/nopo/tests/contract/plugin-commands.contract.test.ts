@@ -13,6 +13,61 @@ import {
 // <cmd>`). Lives alongside the M4.1/M4.2 PoC contracts and follows the same
 
 const cases: ContractCase[] = [
+  {
+    name: "typed boolean and equals options preserve following plugin targets",
+    fixture: "plugin-commands",
+    argv: [
+      "cli-plugin",
+      "forward-args",
+      "--print",
+      "alpha",
+      "--who=kevin",
+      "beta",
+    ],
+    expect: (io) => {
+      expectExitCode(io, null);
+      expect(JSON.parse(io.stdout.text())).toEqual({
+        positionals: ["alpha", "beta"],
+        passthrough: [],
+        print: true,
+        who: "kevin",
+        tag: [],
+      });
+    },
+  },
+  {
+    name: "bare separator forwards tool flags, equals, whitespace and positionals verbatim",
+    fixture: "plugin-commands",
+    argv: [
+      "cli-plugin",
+      "forward-args",
+      "alpha",
+      "--",
+      "a b.test.ts",
+      "--who=tool",
+      "--tag",
+      "x",
+      "--help",
+      "--print=true",
+    ],
+    expect: (io) => {
+      expectExitCode(io, null);
+      expect(JSON.parse(io.stdout.text())).toEqual({
+        positionals: ["alpha"],
+        passthrough: [
+          "a b.test.ts",
+          "--who=tool",
+          "--tag",
+          "x",
+          "--help",
+          "--print=true",
+        ],
+        print: false,
+        who: "default",
+        tag: [],
+      });
+    },
+  },
   // GROUP A: plugin discovery surface `nopo` (no args) and `nopo --help` print the
   // discovered command set through `console.log` — NOT `io.stdout`. We can't assert
   {

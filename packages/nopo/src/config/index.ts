@@ -145,6 +145,8 @@ const CommandDepsSchema = z.array(z.string().min(1)).optional();
 const SubSubCommandObjectSchema = z
   .object({
     command: z.string().min(1).optional(),
+    plugin: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
     env: CommandEnvSchema,
     dir: CommandDirSchema,
     context: CommandContextSchema,
@@ -153,12 +155,14 @@ const SubSubCommandObjectSchema = z
   })
   .refine(
     (data) => {
-      const hasCommand = !!data.command;
+      const hasCommand = !!data.command || !!data.plugin;
+      if (data.args && !data.plugin) return false;
       const hasDeps = !!data.deps && data.deps.length > 0;
       return hasCommand || hasDeps;
     },
     {
-      message: "Must specify 'command' or 'deps'.",
+      message:
+        "Must specify 'command', 'plugin', or 'deps'. 'args' requires 'plugin'.",
     },
   );
 
@@ -168,6 +172,8 @@ const SubSubCommandSchema = z.union([
     .min(1)
     .transform((cmd) => ({
       command: cmd,
+      plugin: undefined,
+      args: undefined,
       env: undefined,
       dir: undefined,
       context: undefined,
@@ -180,6 +186,8 @@ const SubSubCommandSchema = z.union([
 const SubCommandObjectSchema = z
   .object({
     command: z.string().min(1).optional(),
+    plugin: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
     env: CommandEnvSchema,
     dir: CommandDirSchema,
     context: CommandContextSchema,
@@ -190,7 +198,8 @@ const SubCommandObjectSchema = z
   .refine(
     (data) => {
       // Must have at least one of command, commands, or deps
-      const hasCommand = !!data.command;
+      const hasCommand = !!data.command || !!data.plugin;
+      if (data.args && !data.plugin) return false;
       const hasCommands =
         !!data.commands && Object.keys(data.commands).length > 0;
       const hasDeps = !!data.deps && data.deps.length > 0;
@@ -201,7 +210,7 @@ const SubCommandObjectSchema = z
     },
     {
       message:
-        "Must specify 'command', 'commands', or 'deps'. Cannot combine 'command' and 'commands'.",
+        "Must specify 'command', 'plugin', 'commands', or 'deps'. Cannot combine 'command' and 'commands', or 'plugin' and 'commands'. 'args' requires 'plugin'.",
     },
   );
 
@@ -211,6 +220,8 @@ const SubCommandSchema = z.union([
     .min(1)
     .transform((cmd) => ({
       command: cmd,
+      plugin: undefined,
+      args: undefined,
       env: undefined,
       dir: undefined,
       context: undefined,
@@ -224,6 +235,8 @@ const SubCommandSchema = z.union([
 const CommandObjectSchema = z
   .object({
     command: z.string().min(1).optional(),
+    plugin: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
     env: CommandEnvSchema,
     dir: CommandDirSchema,
     context: CommandContextSchema,
@@ -234,7 +247,8 @@ const CommandObjectSchema = z
   .refine(
     (data) => {
       // Must have at least one of command, commands, or deps
-      const hasCommand = !!data.command;
+      const hasCommand = !!data.command || !!data.plugin;
+      if (data.args && !data.plugin) return false;
       const hasCommands =
         !!data.commands && Object.keys(data.commands).length > 0;
       const hasDeps = !!data.deps && data.deps.length > 0;
@@ -245,7 +259,7 @@ const CommandObjectSchema = z
     },
     {
       message:
-        "Must specify 'command', 'commands', or 'deps'. Cannot combine 'command' and 'commands'.",
+        "Must specify 'command', 'plugin', 'commands', or 'deps'. Cannot combine 'command' and 'commands', or 'plugin' and 'commands'. 'args' requires 'plugin'.",
     },
   );
 
@@ -255,6 +269,8 @@ const CommandSchema = z.union([
     .min(1)
     .transform((cmd) => ({
       command: cmd,
+      plugin: undefined,
+      args: undefined,
       env: undefined,
       dir: undefined,
       context: undefined,
@@ -664,6 +680,8 @@ export type CommandContext = "host" | "container";
 
 // Sub-command (no cross-service dependencies, but deps allowed)
 export interface NormalizedSubCommand {
+  plugin?: string;
+  args?: string[];
   command?: string;
   env?: Record<string, string>;
   dir?: string;
@@ -673,6 +691,8 @@ export interface NormalizedSubCommand {
 }
 
 export interface NormalizedCommand {
+  plugin?: string;
+  args?: string[];
   command?: string;
   env?: Record<string, string>;
   dir?: string;
@@ -1031,6 +1051,33 @@ export async function loadPlugins(
       throw new Error(
         `Plugin '${ref.name}' factory must return an object with a 'name' field. ` +
           `Got: ${JSON.stringify(definition)}`,
+      );
+    }
+
+    const commandNames = new Set<string>();
+    for (const command of definition.commands ?? []) {
+      if (
+        typeof command.name !== "string" ||
+        !command.name ||
+        typeof command.fn !== "function"
+      ) {
+        throw new Error(
+          `Plugin '${definition.name}' has an invalid command definition.`,
+        );
+      }
+      if (commandNames.has(command.name)) {
+        throw new Error(
+          `Plugin '${definition.name}' has duplicate command '${command.name}'.`,
+        );
+      }
+      commandNames.add(command.name);
+    }
+    if (
+      definition.defaultCommand !== undefined &&
+      !commandNames.has(definition.defaultCommand)
+    ) {
+      throw new Error(
+        `Plugin '${definition.name}' default command '${definition.defaultCommand}' is not registered.`,
       );
     }
 
@@ -1906,9 +1953,11 @@ function normalizeSubCommands(
 
     const deps = "deps" in cmd ? cmd.deps : undefined;
 
-    if (cmd.command) {
+    if (cmd.command || cmd.plugin) {
       result[name] = {
         command: cmd.command,
+        plugin: cmd.plugin,
+        args: cmd.args,
         env: cmd.env,
         dir: cmd.dir,
         context: cmd.context,
@@ -1947,6 +1996,8 @@ function normalizeSubSubCommands(
   for (const [name, cmd] of Object.entries(commands)) {
     result[name] = {
       command: cmd.command,
+      plugin: cmd.plugin,
+      args: cmd.args,
       env: cmd.env,
       dir: cmd.dir,
       context: cmd.context,
@@ -1987,9 +2038,11 @@ function normalizeCommands(
       );
     }
 
-    if (cmd.command) {
+    if (cmd.command || cmd.plugin) {
       result[name] = {
         command: cmd.command,
+        plugin: cmd.plugin,
+        args: cmd.args,
         env: cmd.env,
         dir: cmd.dir,
         context: cmd.context,

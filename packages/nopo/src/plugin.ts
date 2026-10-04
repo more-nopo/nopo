@@ -27,6 +27,15 @@ export interface RunContext {
   env: Record<string, string>;
 }
 
+/** Present when a target command delegates to a plugin. Environment and working
+ * directory are resolved without mutating shared process state. */
+export interface PluginCommandContext {
+  target: string;
+  command: string;
+  cwd: string;
+  env: Record<string, string>;
+}
+
 export interface HookContext {
   runner: Runner;
   args: ScriptArgs;
@@ -40,11 +49,19 @@ export interface HookContext {
   /** Set when the "run" override is being called */
   runContext?: RunContext;
   /**
-   * Positional arguments for plugin commands (everything in argv that
-   * isn't a flag or option). For overrides this is empty. For plugin
+   * Positional arguments before `--` for plugin commands (excluding flags
+   * and option values). For overrides this is empty. For plugin
    * commands this is everything after `nopo <plugin> <command>`.
    */
   positionals?: string[];
+  /** Arguments after a bare `--` in a plugin command. Kept verbatim and excluded
+   * from both `args` and `positionals`, so plugins can forward them to their tool.
+   */
+  passthrough?: string[];
+  /** Complete plugin argument vector, without shell interpolation. */
+  argv?: string[];
+  /** Owning target command, absent for direct `nopo <plugin> <command>` calls. */
+  commandContext?: PluginCommandContext;
 
   /** The active plan node's `payload`, opaque to the runtime — hook authors narrow at the
    * entry point (e.g. `const p = ctx.payload as { targets: string[] };`). Mirrors how
@@ -167,6 +184,10 @@ export interface NopoPlugin {
    */
   commands?: PluginCommand[];
 
+  /** Optional explicit default for target delegation. Must name a registered command.
+   * Core never infers a default from a command's name, order, or count. */
+  defaultCommand?: string;
+
   /** Declarative claim+coalesce specs that fold N plan nodes into a single batch node during
    * the compaction pass that runs between `static plan()` and `executePlan`. See {@link
    * BatchSpec} and `plan-compact.ts` for the contract.
@@ -208,4 +229,20 @@ export interface PluginReference {
   name: string;
   path?: string;
   config?: Record<string, unknown>;
+}
+
+/** Declaring a delegated command also opts its target into that plugin's discovery. */
+interface PluginCommandNode {
+  plugin?: string;
+  commands?: Record<string, PluginCommandNode>;
+}
+export function hasPluginCommand(
+  commands: Record<string, PluginCommandNode>,
+  plugin: string,
+): boolean {
+  return Object.values(commands).some(
+    (command) =>
+      command.plugin === plugin ||
+      (command.commands && hasPluginCommand(command.commands, plugin)),
+  );
 }

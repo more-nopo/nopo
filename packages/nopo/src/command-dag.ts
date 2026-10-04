@@ -88,6 +88,11 @@ export function resolveCommandDag(
   const steps: CommandDagStep[] = [];
   for (const name of ordered) {
     const cmd = commands[name]!;
+    if (cmd.plugin) {
+      throw new Error(
+        `Service "${serviceId}" command DAG cannot serialize plugin delegation '${name}' as a shell command.`,
+      );
+    }
     if (!cmd.command) {
       // Composition node (deps-only) — nothing to execute, its deps ran.
       continue;

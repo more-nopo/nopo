@@ -21,6 +21,30 @@ module.exports.default = function cliPlugin() {
 
     commands: [
       {
+        name: "forward-args",
+        description: "Probe typed plugin options and verbatim tool arguments.",
+        args: {
+          getSchema: function () {
+            return {
+              print: { type: "boolean", default: false, description: "print" },
+              who: { type: "string", default: "default", description: "who" },
+              tag: { type: "string[]", default: [], description: "tag" },
+            };
+          },
+        },
+        fn: async function (ctx, args) {
+          ctx.io.stdout.write(
+            JSON.stringify({
+              positionals: ctx.positionals,
+              passthrough: ctx.passthrough,
+              print: args.get("print"),
+              who: args.get("who"),
+              tag: args.get("tag"),
+            }) + "\n",
+          );
+        },
+      },
+      {
         name: "hello",
         description: "Plain command — writes a literal string to stdout.",
         fn: async function (ctx) {

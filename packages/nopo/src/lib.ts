@@ -1248,6 +1248,13 @@ export class Runner {
     // Centralized execution plan: resolve targets through all filtering stages
     this.resolveExecutionPlan(ScriptClass);
 
+    // Target command delegation must resolve before dependency scripts (env/build)
+    // can execute, and a dry run must reject the same invalid references.
+    if (ScriptClass.name === "") {
+      const args = this.prepareScriptArgs(ScriptClass, ScriptClass, false);
+      buildScopeForScript(this, ScriptClass, args);
+    }
+
     // Intercept --print: output the resolved plan and return without executing. resolution
     // form is opt-in via `--print --json` (added in M3, CI migrated in M4).
     if (this.hasPrintFlag()) {
@@ -1450,7 +1457,14 @@ export class Runner {
    * script-scoped, and (b) `collectDryRunOutput` runs before per-script arg parsing has
    */
   private hasPrintFlag(): boolean {
-    return this.argv.some((a) => a === "--print" || a.startsWith("--print="));
+    return this.controlArgv().some(
+      (a) => a === "--print" || a.startsWith("--print="),
+    );
+  }
+
+  private controlArgv(): string[] {
+    const separator = this.argv.indexOf("--");
+    return separator < 0 ? this.argv : this.argv.slice(0, separator);
   }
 
   /** Resolve the `--print` mode from argv. Bare `--print` and `--print=compacted` both yield
@@ -1459,7 +1473,7 @@ export class Runner {
    * `"compacted"` (forgiving rather than error-prone for shell pipelines).
    */
   private getPrintMode(): PrintMode {
-    for (const arg of this.argv) {
+    for (const arg of this.controlArgv()) {
       if (arg === "--print") return "compacted";
       if (arg.startsWith("--print=")) {
         const value = arg.slice("--print=".length);
@@ -1476,7 +1490,7 @@ export class Runner {
    * the typed surface.
    */
   private hasJsonFlag(): boolean {
-    return this.argv.includes("--json");
+    return this.controlArgv().includes("--json");
   }
 
   /** Render the dry-run plan as an ASCII DAG and write it to stdout. Trivial plans (≤1 node)

@@ -1,0 +1,10 @@
+{
+  "positionals": [
+    "alpha",
+    "beta"
+  ],
+  "passthrough": [],
+  "print": true,
+  "who": "kevin",
+  "tag": []
+}

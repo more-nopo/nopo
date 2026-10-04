@@ -124,15 +124,31 @@ function buildCommandScope(
     .join(" ");
   const stages: CommandStage[] = rawStages.map((tasks, index) => ({
     index,
-    tasks: suffix
-      ? tasks.map((t) => ({ ...t, executable: `${t.executable} ${suffix}` }))
-      : tasks,
+    tasks: tasks.map((task) =>
+      task.plugin
+        ? { ...task, args: [...(task.args ?? []), ...passthrough] }
+        : suffix
+          ? { ...task, executable: `${task.executable} ${suffix}` }
+          : task,
+    ),
   }));
   // CLI override for execution context (`--context host|container`).
   // CommandScript.parseCommandArgs validates the value strictly upstream
   const ctxRaw = args.get<string | undefined>("context");
   const contextOverride =
     ctxRaw === "host" || ctxRaw === "container" ? ctxRaw : undefined;
+  for (const stage of stages) {
+    for (const task of stage.tasks) {
+      if (
+        task.plugin &&
+        (contextOverride ?? task.context ?? "host") !== "host"
+      ) {
+        throw new Error(
+          `${task.service}:${task.command}: Plugin command delegation requires context: host.`,
+        );
+      }
+    }
+  }
   return {
     commandName,
     targets,

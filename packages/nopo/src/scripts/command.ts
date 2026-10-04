@@ -1,3 +1,4 @@
+import { runPluginCommand } from "../plugin-command.ts";
 import path from "node:path";
 
 import { baseArgs } from "../args.ts";
@@ -566,6 +567,35 @@ export default class CommandScript extends Script {
 
     // Determine effective context: CLI override > task config > default (host)
     const effectiveContext = contextOverride ?? task.context ?? "host";
+
+    if (task.plugin) {
+      if (effectiveContext !== "host")
+        throw new Error("Plugin command delegation requires context: host.");
+      const plugin = this.runner.config.project.plugins.find(
+        (p) => p.definition.name === task.plugin,
+      );
+      const command = plugin?.definition.commands?.find(
+        (c) => c.name === task.executable,
+      );
+      if (!command)
+        throw new Error(
+          `Plugin command '${task.plugin}:${task.executable}' is not loaded.`,
+        );
+      const env = {
+        ...this.env,
+        ...expandEnvValues(mergedTask.env ?? {}, this.env),
+      };
+      this.log(
+        `[${task.service}:${task.command}] ${task.plugin}:${task.executable}`,
+      );
+      await runPluginCommand(command, this.runner, task.args ?? [], {
+        target: task.service,
+        command: task.command,
+        cwd: this.#resolveWorkingDirectory(mergedTask, service.paths.root),
+        env,
+      });
+      return;
+    }
 
     if (effectiveContext === "container") {
       await this.#executeInContainer(mergedTask, service.paths.root);

@@ -40,6 +40,29 @@ nopo status
 nopo list
 ```
 
+Target commands can delegate directly to a registered plugin:
+
+```yaml
+commands:
+  test:
+    plugin: vitest
+    args: ["--maxWorkers=2"]
+```
+
+`nopo test ui` passes the owning target and command environment to Vitest. Plugins
+may declare an explicit default command; missing defaults or command references
+fail validation before execution. See [command configuration](nopo/docs/cli/commands/config.md).
+
+The [Vitest plugin](nopo/plugins/vitest/README.md) provides `run` (default) and
+`list`. The [Bun plugin](nopo/plugins/bun/README.md) provides `test` (default),
+`run`, and `build`, independently of Bun package-manager configuration.
+
+```bash
+nopo vitest run web ui
+nopo vitest list web ui -- --filesOnly --json
+nopo bun test api -- ./test/
+```
+
 ## CI
 
 Merges to `main` go through GitHub's native merge queue. Job `ci` runs `nopo test` on pull requests and on the merge group. Job `platforms` (ubuntu and macOS) runs on the merge group only.

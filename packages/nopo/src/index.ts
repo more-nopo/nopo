@@ -1,3 +1,4 @@
+import { runPluginCommand } from "./plugin-command.ts";
 import { killTrackedChildren } from "./child-registry.ts";
 import { loadPlugins, loadProjectConfig } from "./config/index.ts";
 import type { IO } from "./io.ts";
@@ -11,7 +12,7 @@ import {
   type Script,
 } from "./lib.ts";
 import { Environment } from "./parse-env.ts";
-import type { HookContext, LoadedPlugin, PluginCommand } from "./plugin.ts";
+import type { LoadedPlugin } from "./plugin.ts";
 import { acquireSlot, NOOP_LEASE } from "./queue-client.ts";
 import { ScriptArgs } from "./script-args.ts";
 import Act from "./scripts/act.ts";
@@ -254,7 +255,8 @@ function printHelp(message: string, io: IO, exitCode = 1): never {
 
 export default async function main(io: IO): Promise<void> {
   const argv = io.argv.slice(2);
-  const args = minimist(argv);
+  const separator = argv.indexOf("--");
+  const args = minimist(separator < 0 ? argv : argv.slice(0, separator));
 
   // Check if this is a command that outputs machine-readable format and should be silent
   const commandName = args._[0] || "";
@@ -471,47 +473,4 @@ function printPluginHelp(plugin: LoadedPlugin, io: IO): never {
   }
 
   return io.exit(0);
-}
-
-async function runPluginCommand(
-  cmd: PluginCommand,
-  runner: Runner,
-  argv: string[],
-): Promise<void> {
-  // Always create a fresh ScriptArgs to avoid shared state between invocations
-  const args = new ScriptArgs(cmd.args?.getSchema() ?? {}, runner);
-  args.parse(argv);
-
-  // Extract positional args (anything that isn't a flag or option value). Plugin commands
-  // legitimately want these (e.g. an optional service id like `nopo playwright e2e root`);
-  const positionals: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const tok = argv[i];
-    if (tok === undefined) continue;
-    if (tok.startsWith("--") || tok.startsWith("-")) {
-      // Skip flag and its value if the next token isn't another flag.
-      const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        i += 1;
-      }
-      continue;
-    }
-    positionals.push(tok);
-  }
-
-  const graph = runner.buildGraph();
-
-  // Plugin commands aren't runtime-dispatched; they always see the default overlay so
-  // resolveRuntime(svc.runtimes, ctx.runtime) returns the same view they got
-  const runtimeName = args.get<string | undefined>("runtime");
-  const context: HookContext = {
-    runner,
-    args,
-    graph,
-    runtime: runtimeName ?? "default",
-    positionals,
-    ...runner.contextIO(),
-  };
-
-  await cmd.fn(context, args);
 }
