@@ -64,10 +64,20 @@ describe("realIO.spawn", () => {
     await new Promise((r) => setTimeout(r, 50));
     abort.abort();
     const result = await spawnPromise;
-    // POSIX shells report SIGTERM as exit 143 (128 + 15); node's `close` event fires with
-    // `code === null` when the child is killed by a signal, which we coalesce to 0
-    expect(result).toBeDefined();
-    // The key invariant: no exception. `sleep 30` would otherwise still
-    // be running when this test finishes.
+    expect(result.exitCode).toBe(143);
   });
+  it.each([
+    ["SIGTERM", 143],
+    ["SIGKILL", 137],
+  ] as const)(
+    "retains %s after a clean-looking summary",
+    async (signal, code) => {
+      const result = await realIO.spawn("node", [
+        "-e",
+        `require('node:fs').writeSync(1, '0 fail\\n'); process.kill(process.pid, '${signal}');`,
+      ]);
+      expect(result.exitCode).toBe(code);
+      expect(result.stdout).toContain("0 fail");
+    },
+  );
 });

@@ -28,7 +28,7 @@ commands:
 Bun handles native configuration, test discovery, preloads, script execution,
 reporting and failure status. Core passes the command's target, merged environment
 and working directory. Invocation failures fail their DAG node and prevent its
-dependents from running. No shutdown failure codes are suppressed.
+dependents from running. Shutdown exits propagate unless a target explicitly enables the guarded test policy below.
 
 ## Unit and integration commands
 
@@ -101,3 +101,40 @@ Delegation currently requires host context. The plugin does not download Bun or
 replace nopo's existing `package_managers.bun` install/sync behavior. The three
 commands have distinct meanings: `test` runs tests, `run` runs a script/file, and
 `build` invokes Bun's bundler.
+
+## Test profiles and shutdown policy
+
+A test profile keeps native flags and default file scope separate:
+
+```yaml
+plugins:
+  bun:
+    test:
+      shutdown: after-success
+      profiles:
+        integration:
+          args: ["--timeout=30000"]
+          files: ["./test/"]
+commands:
+  test:
+    commands:
+      integration:
+        plugin: bun
+        command: test
+        args: ["--profile=integration"]
+```
+
+`--profile=name` selects exactly one named profile. Unknown profiles fail before
+execution. Profile args precede CLI args; profile files are native Bun path filters.
+`--files ./test/a.test.ts ./test/b.test.ts` replaces the profile's file scope while
+retaining its native flags. Put native options before `--files`; everything after
+it must be an existing file inside the target, including after resolving symlinks.
+No match or missing files never falls back to the whole suite. Root and target
+`test.profiles` merge by profile name, with target profiles overriding shared ones.
+
+Shutdown handling defaults to `strict`. Opt-in `after-success` accepts only exit
+99 or 100, and only with a complete `0 fail` summary and no nonzero failure
+summary. All other exits propagate, including OOM exit 137. Captured output streams
+through Nopo IO as it arrives; concurrent invocations do not share logs or require
+shell `tee`/temporary-log scripts. This workaround does not retry tests and does
+not accept an absent summary.

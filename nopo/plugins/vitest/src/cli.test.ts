@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -88,7 +88,7 @@ function fixture() {
 import { appendFileSync } from 'node:fs';
 import { test, expect } from 'vitest';
 import message from '@message';
-test(${JSON.stringify(`${name}-${suffix}`)}, () => {
+test(${JSON.stringify(`${name}-${suffix}`)}, async () => {
   expect(message).toBe(${JSON.stringify(name)});
   expect(process.env.PROJECT_ENV).toBe(${JSON.stringify(name)});
   expect(process.env.TARGET).toBe(${JSON.stringify(name)});
@@ -99,27 +99,41 @@ test(${JSON.stringify(`${name}-${suffix}`)}, () => {
   }
   return root;
 }
-function nopo(root: string, ...args: string[]) {
-  const result = spawnSync("bun", [cli, ...args], {
-    cwd: root,
-    encoding: "utf8",
-    timeout: 30_000,
-    // Avoid nopo's unrelated dynamic Docker-port probe in sandboxed test runs.
-    env: {
-      ...process.env,
-      ROOT_DIR: root,
-      DOCKER_PORT: "80",
-      NO_COLOR: "1",
-      FORCE_COLOR: "0",
+async function nopo(root: string, ...args: string[]) {
+  return new Promise<{ code: number | null; output: string; stdout: string }>(
+    (resolve, reject) => {
+      const child = spawn("bun", [cli, ...args], {
+        cwd: root,
+        env: {
+          ...process.env,
+          ROOT_DIR: root,
+          NOPO_NO_QUEUE: "1",
+          DOCKER_PORT: "80",
+          NO_COLOR: "1",
+          FORCE_COLOR: "0",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "",
+        stderr = "";
+      const timeout = setTimeout(() => {
+        child.kill("SIGTERM");
+        reject(new Error("Fixture CLI timed out"));
+      }, 30000);
+      child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
+      child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+      child.on("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on("close", (code) => {
+        clearTimeout(timeout);
+        resolve({ code, output: stdout + stderr, stdout });
+      });
     },
-  });
-  if (result.error) throw result.error;
-  return {
-    code: result.status,
-    output: result.stdout + result.stderr,
-    stdout: result.stdout,
-  };
+  );
 }
+
 function run(root: string, ...args: string[]) {
   return nopo(root, "vitest", ...args);
 }
@@ -139,10 +153,10 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-describe("real nopo → Vitest CLI", () => {
-  it("can be invoked by an ordinary nopo target command", () => {
+describe("real nopo → Vitest CLI", async () => {
+  it("can be invoked by an ordinary nopo target command", async () => {
     const root = fixture();
-    const result = nopo(
+    const result = await nopo(
       root,
       "test",
       "beta",
@@ -155,7 +169,7 @@ describe("real nopo → Vitest CLI", () => {
       "beta/one",
     ]);
   });
-  it("opts in through delegation without a config and scopes dir and command env", () => {
+  it("opts in through delegation without a config and scopes dir and command env", async () => {
     const root = fixture();
     const dir = path.join(root, "apps/alpha/nested");
     mkdirSync(dir);
@@ -178,12 +192,12 @@ describe("real nopo → Vitest CLI", () => {
       path.join(dir, "own.test.js"),
       `import {test,expect} from 'vitest'; test('own',()=>expect(process.env.COMMAND_VALUE).toBe('command'));`,
     );
-    const result = nopo(root, "test", "alpha");
+    const result = await nopo(root, "test", "alpha");
     expect(result.code, result.output).toBe(0);
     expect(result.output).toContain("own.test.js");
     expect(records(root)).toEqual([]);
   });
-  it("delegates an explicit list command and forwards configured native flags", () => {
+  it("delegates an explicit list command and forwards configured native flags", async () => {
     const root = fixture();
     writeFileSync(
       path.join(root, "apps/alpha/nopo.yml"),
@@ -198,27 +212,27 @@ describe("real nopo → Vitest CLI", () => {
         },
       }),
     );
-    const result = nopo(root, "inspect", "alpha");
+    const result = await nopo(root, "inspect", "alpha");
     expect(result.code, result.output).toBe(0);
     expect(result.output).toContain("one.test.js");
     expect(records(root)).toEqual([]);
   });
-  it("rejects nested project configs instead of accidentally running default test globs", () => {
+  it("rejects nested project configs instead of accidentally running default test globs", async () => {
     const root = fixture();
     writeFileSync(
       path.join(root, "apps/alpha/vitest.config.mjs"),
       "export default {test: {projects: ['other']}};",
     );
-    const result = run(root, "run", "alpha", "beta");
+    const result = await run(root, "run", "alpha", "beta");
     expect(result.code, result.output).toBe(1);
     expect(result.output).toContain(
       "nested projects/workspaces are unsupported",
     );
     expect(records(root)).toEqual([]);
   });
-  it("runs selected targets with native aliases and project environments", () => {
+  it("runs selected targets with native aliases and project environments", async () => {
     const root = fixture();
-    const result = run(root, "run", "beta", "--", "--reporter=dot");
+    const result = await run(root, "run", "beta", "--", "--reporter=dot");
     expect(result.code, result.output).toBe(0);
     expect(records(root)).toHaveLength(2);
     expect(
@@ -227,7 +241,7 @@ describe("real nopo → Vitest CLI", () => {
       ),
     ).toBe(true);
   });
-  it("preserves single-target config overrides and root-only reporter settings", () => {
+  it("preserves single-target config overrides and root-only reporter settings", async () => {
     const root = fixture();
     const dir = path.join(root, "apps/beta");
     writeFileSync(
@@ -238,7 +252,7 @@ describe("real nopo → Vitest CLI", () => {
         reporters: ['json'], outputFile: './native-report.json'}};
     `,
     );
-    const result = nopo(
+    const result = await nopo(
       root,
       "test",
       "beta",
@@ -253,9 +267,9 @@ describe("real nopo → Vitest CLI", () => {
     );
     expect(report.numPassedTests).toBe(1);
   });
-  it("runs two targets in one Vitest process with separate native projects", () => {
+  it("runs two targets in one Vitest process with separate native projects", async () => {
     const root = fixture();
-    const result = run(
+    const result = await run(
       root,
       "run",
       "alpha",
@@ -273,9 +287,9 @@ describe("real nopo → Vitest CLI", () => {
     expect(new Set(ran.map((r) => r.parent)).size).toBe(1);
     expect(ran.every((r) => r.cwd === root)).toBe(true);
   });
-  it("forwards a file filter and shard arguments instead of interpreting them as targets", () => {
+  it("forwards a file filter and shard arguments instead of interpreting them as targets", async () => {
     const root = fixture();
-    const result = run(
+    const result = await run(
       root,
       "run",
       "alpha",
@@ -286,7 +300,7 @@ describe("real nopo → Vitest CLI", () => {
     expect(result.code, result.output).toBe(0);
     expect(records(root).map((r) => r.file)).toEqual(["one"]);
     rmSync(path.join(root, "ran.jsonl"));
-    const shard = run(
+    const shard = await run(
       root,
       "run",
       "alpha",
@@ -298,7 +312,7 @@ describe("real nopo → Vitest CLI", () => {
     expect(shard.code, shard.output).toBe(0);
     const first = records(root).map((r) => `${r.target}/${r.file}`);
     rmSync(path.join(root, "ran.jsonl"));
-    const next = run(
+    const next = await run(
       root,
       "run",
       "alpha",
@@ -312,9 +326,9 @@ describe("real nopo → Vitest CLI", () => {
     expect(first.length + second.length).toBe(4);
     expect(new Set([...first, ...second]).size).toBe(4);
   }, 60_000);
-  it("lists native test files and supports project filtering in a shared run", () => {
+  it("lists native test files and supports project filtering in a shared run", async () => {
     const root = fixture();
-    const listed = run(
+    const listed = await run(
       root,
       "list",
       "alpha",
@@ -330,32 +344,140 @@ describe("real nopo → Vitest CLI", () => {
     expect(JSON.parse(listed.stdout)).toHaveLength(2);
     expect(records(root)).toEqual([]);
   });
-  it("propagates a real test failure from the shared run", () => {
+  it("propagates a real test failure from the shared run", async () => {
     const root = fixture();
     writeFileSync(
       path.join(root, "apps/alpha/one.test.js"),
       "import { test, expect } from 'vitest'; test('broken', () => expect(1).toBe(2));",
     );
-    const result = run(root, "run", "alpha", "beta", "--", "--reporter=dot");
+    const result = await run(
+      root,
+      "run",
+      "alpha",
+      "beta",
+      "--",
+      "--reporter=dot",
+    );
     expect(result.code, result.output).toBe(1);
     expect(result.output).toContain("broken");
     expect(records(root).filter((r) => r.target === "beta")).toHaveLength(2);
   });
-  it("prints without executing tests, rejects unknown targets, and forwards --help", () => {
+  it("prints without executing tests, rejects unknown targets, and forwards --help", async () => {
     const root = fixture();
-    const result = run(root, "run", "--print", "beta");
+    const result = await run(root, "run", "--print", "beta");
     expect(result.code, result.output).toBe(0);
     expect(
       JSON.parse(result.stdout).targets.map((t: { id: string }) => t.id),
     ).toEqual(["beta"]);
     expect(records(root)).toEqual([]);
-    expect(run(root, "run", "typo").code).toBe(1);
-    expect(run(root, "run", "--shard=1/2").output).toContain(
+    expect((await run(root, "run", "typo")).code).toBe(1);
+    expect((await run(root, "run", "--shard=1/2")).output).toContain(
       "Put Vitest options after --",
     );
-    const help = run(root, "run", "alpha", "--", "--help");
+    const help = await run(root, "run", "alpha", "--", "--help");
     expect(help.code, help.output).toBe(0);
     expect(help.output).toContain("vitest");
     expect(help.output).not.toContain("Plugin: vitest");
+  });
+});
+
+describe("runner-owned test policies", async () => {
+  function policyFixture() {
+    const root = fixture();
+    const dir = path.join(root, "apps/alpha");
+    writeFileSync(
+      path.join(dir, "nopo.yml"),
+      JSON.stringify({
+        name: "alpha",
+        plugins: {
+          vitest: {
+            env: { PROJECT_ENV: "alpha" },
+            test: { quarantine: "quarantine.json", sharding: "clamp" },
+          },
+        },
+        commands: { test: { plugin: "vitest" } },
+      }),
+    );
+    writeFileSync(
+      path.join(dir, "red.test.js"),
+      "import {test,expect} from 'vitest'; test('red',()=>expect(1).toBe(2));",
+    );
+    writeFileSync(
+      path.join(dir, "quarantine.json"),
+      JSON.stringify({ files: { "red.test.js": "fixture" } }),
+    );
+    return { root, dir };
+  }
+  it("gates normal tests and audits quarantined failures without consumer config cooperation", async () => {
+    const { root } = policyFixture();
+    const r = await run(root, "run", "alpha");
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("still fail as expected");
+  });
+  it("retains quarantine through a symlinked checkout", async () => {
+    const { root } = policyFixture();
+    const alias = root + "-alias";
+    roots.push(alias);
+    symlinkSync(root, alias, "dir");
+    const r = await run(alias, "run", "alpha");
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("still fail as expected");
+  });
+  it("rejects graduation and missing entries", async () => {
+    const { root, dir } = policyFixture();
+    writeFileSync(
+      path.join(dir, "red.test.js"),
+      "import {test,expect} from 'vitest'; test('green',()=>expect(1).toBe(1));",
+    );
+    let r = await run(root, "run", "alpha");
+    expect(r.code, r.output).not.toBe(0);
+    expect(r.output).toContain("now PASS");
+    rmSync(path.join(dir, "red.test.js"));
+    r = await run(root, "run", "alpha");
+    expect(r.code).not.toBe(0);
+  });
+  it("preserves file filters and avoids an unselected graduation", async () => {
+    const { root, dir } = policyFixture();
+    writeFileSync(
+      path.join(dir, "red.test.js"),
+      "import {test} from 'vitest'; test('green',()=>{});",
+    );
+    const r = await run(
+      root,
+      "run",
+      "alpha",
+      "--",
+      "one.test.js",
+      "--passWithNoTests",
+    );
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("No quarantined specs match");
+  });
+  it("clamps shards and leaves excess shards empty", async () => {
+    const { root, dir } = policyFixture();
+    writeFileSync(path.join(dir, "quarantine.json"), '{"files":{}}');
+    const r = await run(root, "run", "alpha", "--", "--shard=4/5");
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("has no test files");
+    const first = await run(
+      root,
+      "run",
+      "alpha",
+      "--",
+      "red.test.js",
+      "--shard",
+      "1/4",
+    );
+    expect(first.code, first.output).not.toBe(0); // no quarantine: red test really gates
+  });
+  it("only audits quarantine on the original first shard", async () => {
+    const { root, dir } = policyFixture();
+    writeFileSync(
+      path.join(dir, "red.test.js"),
+      "import {test} from 'vitest'; test('green',()=>{});",
+    );
+    const r = await run(root, "run", "alpha", "--", "--shard=2/4");
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("Quarantine audit runs on shard 1 only");
   });
 });

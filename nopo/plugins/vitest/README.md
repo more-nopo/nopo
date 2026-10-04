@@ -154,7 +154,36 @@ This version provides native discovery and execution. It makes no Jev calls and
 runs the full selected scope unless the caller supplies Vitest filters. This is
 the runner boundary where relevance-based selection can later be integrated.
 
-Keep existing wrapper behavior until explicitly migrated. For example, af-web's
-wrapper also audits quarantined tests and verifies that they still fail. Replacing
-it with a plain Vitest invocation would drop that audit. The plugin is not a
-drop-in replacement for that two-pass policy yet.
+## Test execution policy
+
+Targets can opt into runner-owned policy without a wrapper script:
+
+```yaml
+plugins:
+  vitest:
+    test:
+      quarantine: test/quarantine.json
+      sharding: clamp
+commands:
+  test:
+    plugin: vitest
+```
+
+`quarantine` reads `{ "files": { "test/example.test.ts": "reason" } }`. Missing
+or outside-target entries fail before running tests. The plugin excludes those
+files from the gate, then audits the selected quarantined files: they must execute
+and still fail. A passing quarantined file fails the command until its entry is
+removed. Native path/name/changed filters remain active in both passes. The audit
+runs only on the original first shard and does not itself shard. Native configs
+need no quarantine environment switch; the plugin applies a temporary overlay.
+
+`sharding: clamp` counts the effective native selection before sharding. It clamps
+an oversized shard total to that count; excess shards report no work. Zero-file
+selections retain Vitest's native no-tests policy. Discovery failure fails the
+command instead of pretending there is no work. The default is `native`.
+
+These policies currently require a single target and a single native project
+config. Multi-target policy runs fail preflight explicitly; independent delegated
+commands retain their DAG execution. Configs, reporters and coverage remain native.
+Root plugin `config.test` can supply shared defaults, overridden by target `test`.
+Pass `--quarantine=off` after `--` to diagnose a quarantined test without the gate/audit policy.
