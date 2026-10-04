@@ -18,10 +18,12 @@ import {
 } from "@more-nopo/nopo/plugin";
 import { ScriptArgs } from "@more-nopo/nopo/script-args";
 import { z } from "zod";
+import { policySchema, runWithPolicy, type TestPolicy } from "./test-policy.ts";
 
 const optionsSchema = z
   .object({
     args: z.array(z.string()).default([]),
+    test: policySchema.optional(),
     env: z.record(z.string()).default({}),
   })
   .strict();
@@ -30,6 +32,7 @@ const projectSchema = optionsSchema.default({});
 const targetOptionsSchema = z
   .object({
     config: z.string().min(1).optional(),
+    test: policySchema.optional(),
     env: z.record(z.string()).default({}),
   })
   .strict();
@@ -41,6 +44,7 @@ export interface VitestTarget {
   root: string;
   config?: string;
   env: Record<string, string>;
+  test?: TestPolicy;
 }
 
 const configNames = ["ts", "mts", "cts", "js", "mjs", "cjs"].map(
@@ -95,7 +99,16 @@ export function discoverTargets(
       { ...service.env, NODE_ENV: "test", ...project.env, ...options.env },
       baseEnv,
     );
-    targets.push({ id, root, config: file, env });
+    targets.push({
+      id,
+      root,
+      config: file,
+      env,
+      test:
+        options.test || project.test
+          ? { ...project.test, ...options.test }
+          : undefined,
+    });
   }
   if (!targets.length)
     throw new Error(
@@ -243,8 +256,15 @@ export async function executeVitest(
   );
   // Delegated argv belongs entirely to Vitest: the owning target is separate context.
   const passthrough = context.commandContext
-    ? (context.argv ?? [])
-    : (context.passthrough ?? []);
+    ? [...(context.argv ?? [])]
+    : [...(context.passthrough ?? [])];
+  const quarantineOff = passthrough.includes("--quarantine=off");
+  if (quarantineOff) {
+    for (let i = passthrough.length - 1; i >= 0; i--)
+      if (passthrough[i] === "--quarantine=off") passthrough.splice(i, 1);
+    for (const target of targets)
+      if (target.test) target.test = { ...target.test, quarantine: undefined };
+  }
   validateForwardedArgs(
     [...project.args, ...passthrough],
     targets.length === 1,
@@ -283,6 +303,22 @@ export async function executeVitest(
       /^(?:--config(?:=|$)|-c)/.test(arg),
     );
     context.io.stderr.write(`[vitest] Target: ${target.id}\n`);
+    if (
+      mode === "run" &&
+      target.test &&
+      (target.test.quarantine || target.test.sharding === "clamp")
+    ) {
+      await runWithPolicy(
+        context,
+        installation.binary,
+        target.root,
+        { ...baseEnv, ...target.env },
+        forwarded,
+        target.config,
+        target.test,
+      );
+      return;
+    }
     await spawnVitest(
       context,
       installation.binary,
@@ -298,6 +334,14 @@ export async function executeVitest(
     );
     return;
   }
+  if (
+    targets.some(
+      (target) => target.test?.quarantine || target.test?.sharding === "clamp",
+    )
+  )
+    throw new Error(
+      "[vitest] Test policies currently require a single target. Use delegated target commands for policy-aware runs.",
+    );
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-"));
   try {
     const configFile = path.join(temporary, "vitest.config.mjs");

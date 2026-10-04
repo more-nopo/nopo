@@ -103,6 +103,7 @@ function run(root: string, ...args: string[]) {
     env: {
       ...process.env,
       ROOT_DIR: root,
+      NOPO_NO_QUEUE: "1",
       DOCKER_PORT: "80",
       NO_COLOR: "1",
       NOPO_SOURCE_VALUE: "literal$NOPO_UNKNOWN_VARIABLE",

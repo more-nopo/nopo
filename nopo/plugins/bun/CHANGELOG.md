@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-bun
 
+## 0.2.0
+
+### Minor Changes
+
+- Own test execution policies: Vitest quarantine auditing and safe sharding; Bun scoped test profiles, explicit-file replacement, and guarded clean-summary shutdown handling. Consumers can remove their runner wrapper scripts.
+
 ## 0.1.1
 
 ### Patch Changes

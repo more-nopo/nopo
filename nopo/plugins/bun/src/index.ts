@@ -6,9 +6,13 @@ import {
 import { expandEnvValues } from "@more-nopo/nopo/expand-env";
 import { ScriptArgs } from "@more-nopo/nopo/script-args";
 import { z } from "zod";
+import { runBunTest, testSchema } from "./test-policy.ts";
 
 const optionsSchema = z
-  .object({ env: z.record(z.string()).default({}) })
+  .object({
+    env: z.record(z.string()).default({}),
+    test: testSchema.optional(),
+  })
   .strict();
 const projectSchema = optionsSchema.default({});
 const targetSchema = z.union([z.boolean(), optionsSchema]);
@@ -80,7 +84,18 @@ async function executeBun(
         baseEnv,
       ),
     };
-    return [{ id, cwd: owner?.cwd ?? service.paths.root, env }];
+    return [
+      {
+        id,
+        cwd: owner?.cwd ?? service.paths.root,
+        env,
+        test: testSchema.parse({
+          ...project.test,
+          ...options.test,
+          profiles: { ...project.test?.profiles, ...options.test?.profiles },
+        }),
+      },
+    ];
   });
   if (!targets.length)
     throw new Error(
@@ -98,6 +113,10 @@ async function executeBun(
   }
   for (const target of targets) {
     context.io.stderr.write(`[bun] ${target.id}: ${command}\n`);
+    if (command === "test") {
+      await runBunTest(context, argv, target.cwd, target.env, target.test);
+      continue;
+    }
     await context.exec("bun", [command, ...argv], {
       cwd: target.cwd,
       env: target.env,
