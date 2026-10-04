@@ -1113,6 +1113,14 @@ export class K8sDeployer {
        * inherits the same block-level volumes list.
        */
       const declaredVolumes = declaredVolumesForService(svc);
+      const storageClasses = terraformVolumeStorageClasses(svc.service);
+      assertTerraformVolumesMatchDeclared(
+        svc.id,
+        storageClasses,
+        declaredVolumes
+          .filter((v) => v.source === undefined)
+          .map((v) => v.name),
+      );
       for (const v of declaredVolumes) {
         if (v.source !== undefined) {
           /** Host-mount mode → ConfigMap. Files live next to the service's nopo.yml; resolve relative to
@@ -1130,8 +1138,15 @@ export class K8sDeployer {
         } else {
           // Size mode → PVC. v.size is guaranteed defined by the XOR
           // validator on VolumeSchema (exactly one of size/source set).
+          // storageClassName is omitted when the plugin entry does not set it.
           allManifests.push(
-            yamlDeclaredPvc(svc.id, v.name, v.size!, this.namespace),
+            yamlDeclaredPvc(
+              svc.id,
+              v.name,
+              v.size!,
+              this.namespace,
+              storageClasses.get(v.name),
+            ),
           );
         }
       }
@@ -1809,16 +1824,123 @@ spec:
 `;
 }
 
+/** DNS subdomain, max 253. Kubernetes storage class names use this form. Reject anything else
+ * before it is interpolated into a manifest so a value cannot break out of the YAML scalar.
+ */
+const STORAGE_CLASS_NAME_RE =
+  /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+const TERRAFORM_VOLUME_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+function hexPreview(value: string): string {
+  return Buffer.from(value, "utf-8").slice(0, 16).toString("hex");
+}
+
+function assertStorageClassName(value: string, context: string): void {
+  if (
+    value.length === 0 ||
+    value.length > 253 ||
+    !STORAGE_CLASS_NAME_RE.test(value)
+  ) {
+    throw new Error(
+      `${context}: storageClassName must be a DNS subdomain (lowercase alphanumeric, '-' or '.', 1-253 chars). Hex preview: ${hexPreview(value)}, length: ${String(value.length)}.`,
+    );
+  }
+}
+
+/** Read `plugins.terraform.volumes` from a service. Each entry may set `storageClassName`.
+ * A missing entry, a missing field, or JSON null means the claim omits `storageClassName`.
+ * The map value is `undefined` when the entry exists and the class is absent.
+ */
+export function terraformVolumeStorageClasses(
+  service: NormalizedService,
+): ReadonlyMap<string, string | undefined> {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- passthrough plugin data
+  const tf = (service.pluginData?.terraform ?? {}) as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(tf, "volumes")) {
+    return new Map();
+  }
+  const raw = tf.volumes;
+  if (!Array.isArray(raw)) {
+    throw new Error(
+      `Service "${service.id}": plugins.terraform.volumes must be an array.`,
+    );
+  }
+  const out = new Map<string, string | undefined>();
+  raw.forEach((entry, index) => {
+    const context = `Service "${service.id}": plugins.terraform.volumes[${String(index)}]`;
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`${context} must be an object with a name.`);
+    }
+    const name = "name" in entry ? entry.name : undefined;
+    if (typeof name !== "string" || !TERRAFORM_VOLUME_NAME_RE.test(name)) {
+      const shown = typeof name === "string" ? name : "";
+      throw new Error(
+        `${context}: name must be lowercase kebab-case. Hex preview: ${hexPreview(shown)}, length: ${String(shown.length)}.`,
+      );
+    }
+    if (out.has(name)) {
+      throw new Error(
+        `Service "${service.id}": plugins.terraform.volumes lists "${name}" more than once.`,
+      );
+    }
+    if (!Object.prototype.hasOwnProperty.call(entry, "storageClassName")) {
+      out.set(name, undefined);
+      return;
+    }
+    const storageClassName = entry.storageClassName;
+    if (storageClassName === null) {
+      out.set(name, undefined);
+      return;
+    }
+    if (typeof storageClassName !== "string") {
+      throw new Error(`${context}: storageClassName must be a string.`);
+    }
+    assertStorageClassName(storageClassName, context);
+    out.set(name, storageClassName);
+  });
+  return out;
+}
+
+/** Plugin volume names have to match a size-mode `runtime.volumes` entry. A typo would
+ * otherwise emit the claim with no storage class.
+ */
+export function assertTerraformVolumesMatchDeclared(
+  serviceId: string,
+  classes: ReadonlyMap<string, string | undefined>,
+  sizeModeVolumeNames: readonly string[],
+): void {
+  const known = new Set(sizeModeVolumeNames);
+  for (const name of classes.keys()) {
+    if (!known.has(name)) {
+      throw new Error(
+        `Service "${serviceId}": plugins.terraform.volumes entry "${name}" does not match a declared size-mode runtime volume.`,
+      );
+    }
+  }
+}
+
 /** Emit a PVC for a declared `runtime.volumes:` entry. PVC name is scoped by serviceId + volume name,
  * so two services declaring volume `data` never collide. Access mode is hardcoded to ReadWriteOnce —
  * the only mode every cloud + Talos CSI driver supports out of the box.
+ * `storageClassName` is omitted when absent. Never emit null.
  */
 export function yamlDeclaredPvc(
   serviceId: string,
   volumeName: string,
   size: string,
   namespace: string,
+  storageClassName?: string,
 ): string {
+  const storageClassLine =
+    storageClassName === undefined
+      ? ""
+      : `  storageClassName: ${storageClassName}\n`;
+  if (storageClassName !== undefined) {
+    assertStorageClassName(
+      storageClassName,
+      `Service "${serviceId}" volume "${volumeName}"`,
+    );
+  }
   return `apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -1830,7 +1952,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  resources:
+${storageClassLine}  resources:
     requests:
       storage: ${size}
 `;

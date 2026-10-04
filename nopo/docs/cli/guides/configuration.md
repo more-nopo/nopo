@@ -126,6 +126,11 @@ runtime:
 #   terraform:
 #     pre_deploy:
 #       - bunx prisma migrate deploy
+#     # Optional storage class for a size-mode runtime.volumes entry.
+#     # Omit storageClassName to leave the claim's class unset.
+#     volumes:
+#       - name: data
+#         storageClassName: longhorn
 
 dependencies:
   - database
