@@ -1,4 +1,4 @@
-# @more-nopo/nopo
+# @more-nopo/nopo-plugin-vitest
 
 ## 0.1.0
 
@@ -16,14 +16,7 @@
   Plugin contexts expose raw argv and forwarded arguments. Boolean and equals-style
   plugin options preserve following targets.
 
-## 0.0.2
-
 ### Patch Changes
 
-- 40bf835: Add optional runtime policies for reserved Kubernetes namespaces. Preserve the namespace shell during deployment and cleanup, set pod priority, and require explicit service overlays. Add `inherit_secrets: false` to exclude default credentials from an independent runtime.
-
-## 0.0.1
-
-### Patch Changes
-
-- 41c2fc9: First public CLI plus hosted CI.
+- Updated dependencies [7e3dcc4]
+  - @more-nopo/nopo@0.1.0
