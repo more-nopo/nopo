@@ -328,3 +328,87 @@ type CommandDependencies =
   | Record<string, string[]>      // { backend: ["build", "clean"] }
   | undefined;                    // use service-level deps
 ```
+
+## Delegating to a plugin
+
+Register a plugin in the root `plugins` list, then delegate a target command:
+
+```yaml
+# Root nopo.yml (alongside existing entries)
+plugins:
+  - name: vitest
+  - name: bun
+```
+
+```yaml
+# Target nopo.yml
+commands:
+  test:
+    plugin: vitest
+    args: ["--coverage"]
+  list-tests:
+    plugin: vitest
+    command: list
+```
+
+`plugin` changes the leaf's executor. When present, `command` names a registered
+plugin command; when omitted, core uses that plugin's explicit `defaultCommand`.
+There is no universal `run` default or inference based on command count/order.
+Plugins need not declare defaults. A declared default must name an existing
+command, and command names must be unique within the plugin.
+
+Before any dependency script or command executes, core resolves every delegated
+leaf in the selected command graph, including dependencies. An unloaded plugin,
+missing default, or unknown command fails validation with the target and command
+path. `--print` performs the same validation. The serialized execution plan stores
+the resolved plugin and command explicitly.
+
+`args` is an optional array of strings, valid only on plugin leaves. Core passes
+it as argv without shell expansion and appends arguments after the invocation's
+`--`. The plugin owns argument semantics. Vitest and Bun treat delegated args as
+native runner arguments; they need no extra separator in YAML. For example:
+
+```sh
+nopo test ui -- --shard=1/3
+```
+
+Delegation supports the existing `env`, `dir`, `deps`, `dependencies` and nested
+`commands` behavior. A plugin leaf cannot also contain child commands. Group
+settings (`env`, `dir`, `context`) are inherited as usual; plugin/args select a
+leaf executor and are not inherited from a group. Each leaf remains a separate
+DAG task. Declaring a Vitest or Bun leaf also opts its target into that plugin's
+discovery, without a duplicate `plugins.<name>: {}` entry.
+
+Delegation currently runs on the host. A resolved `context: container` is rejected
+during planning, including a CLI context override. Plugin leaves cannot be embedded
+in shell-only command DAGs used to generate Docker build scripts.
+
+### Plugin author contract
+
+```ts
+const plugin = {
+  name: "example",
+  defaultCommand: "check", // optional, validated against commands
+  commands: [{
+    name: "check",
+    description: "Check the selected target",
+    async fn(ctx, args) {
+      const owner = ctx.commandContext;
+      // owner: { target, command, cwd, env }, present for target delegation
+      // ctx.argv: complete argv; ctx.args: parsed plugin options
+      // ctx.positionals / ctx.passthrough: split using the plugin schema and --
+      await ctx.exec("tool", ctx.argv ?? []);
+    },
+  }],
+};
+```
+
+`commandContext.command` is the nopo path (`test:unit`), not the selected plugin
+command. Its environment is the resolved process/service/group/leaf environment.
+`ctx.exec` and `ctx.shell` default to this environment and working directory;
+explicit execution options may override them. `ctx.io` and the shared runner are
+unchanged, so direct `ctx.io.spawn` users must pass their own execution options.
+Core never mutates shared `process.env` or `process.cwd()` for delegated commands.
+
+Direct `nopo <plugin> <command>` calls retain their explicit command syntax and
+have no `commandContext`; plugins decide their own target discovery there.

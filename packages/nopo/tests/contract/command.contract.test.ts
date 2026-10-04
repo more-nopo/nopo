@@ -329,7 +329,7 @@ const cases: ContractCase[] = [
     // The predecessor of this row asserted the opposite: `--extra` landed in `parsed._`,
     // failed the unknown-target check, and exited 1. parseCommandArgs now splits argv
     fixture: "commands-grid",
-    argv: ["format", "core", "--", "--extra", "--print"],
+    argv: ["format", "core", "--print", "--", "--extra"],
     expect: (io) => {
       const plan = parsePrintPlan(io);
       expect(plan.command).toBe("format");

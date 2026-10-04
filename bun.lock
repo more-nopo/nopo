@@ -23,9 +23,22 @@
         "vitest": "^3.2.1",
       },
     },
+    "nopo/plugins/bun": {
+      "name": "@more-nopo/nopo-plugin-bun",
+      "version": "0.0.1",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "zod": "^3.24.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vitest": "^3.2.7",
+      },
+    },
     "nopo/plugins/diff": {
       "name": "@more-nopo/nopo-plugin-diff",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
         "picomatch": "^4.0.0",
@@ -40,7 +53,7 @@
     },
     "nopo/plugins/docker": {
       "name": "@more-nopo/nopo-plugin-docker",
-      "version": "0.0.1",
+      "version": "0.0.4",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
         "glob": "^11.0.0",
@@ -54,7 +67,7 @@
     },
     "nopo/plugins/docker-compose": {
       "name": "@more-nopo/nopo-plugin-docker-compose",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
         "docker-compose": "^1.2.0",
@@ -70,7 +83,7 @@
     },
     "nopo/plugins/docs": {
       "name": "@more-nopo/nopo-plugin-docs",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
       },
@@ -99,7 +112,7 @@
     },
     "nopo/plugins/playwright": {
       "name": "@more-nopo/nopo-plugin-playwright",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
       },
@@ -112,7 +125,7 @@
     },
     "nopo/plugins/sonar": {
       "name": "@more-nopo/nopo-plugin-sonar",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
       },
@@ -125,7 +138,7 @@
     },
     "nopo/plugins/terraform": {
       "name": "@more-nopo/nopo-plugin-terraform",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@more-nopo/nopo": "workspace:*",
         "yaml": "^2.8.2",
@@ -138,9 +151,22 @@
         "vitest": "^3.1.1",
       },
     },
+    "nopo/plugins/vitest": {
+      "name": "@more-nopo/nopo-plugin-vitest",
+      "version": "0.0.1",
+      "dependencies": {
+        "@more-nopo/nopo": "workspace:*",
+        "zod": "^3.24.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.16.0",
+        "typescript": "^5.6.0",
+        "vitest": "^3.2.7",
+      },
+    },
     "packages/nopo": {
       "name": "@more-nopo/nopo",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "nopo": "./bin.js",
       },
@@ -731,6 +757,8 @@
 
     "@more-nopo/nopo-mcp": ["@more-nopo/nopo-mcp@workspace:nopo/mcp"],
 
+    "@more-nopo/nopo-plugin-bun": ["@more-nopo/nopo-plugin-bun@workspace:nopo/plugins/bun"],
+
     "@more-nopo/nopo-plugin-diff": ["@more-nopo/nopo-plugin-diff@workspace:nopo/plugins/diff"],
 
     "@more-nopo/nopo-plugin-docker": ["@more-nopo/nopo-plugin-docker@workspace:nopo/plugins/docker"],
@@ -744,6 +772,8 @@
     "@more-nopo/nopo-plugin-sonar": ["@more-nopo/nopo-plugin-sonar@workspace:nopo/plugins/sonar"],
 
     "@more-nopo/nopo-plugin-terraform": ["@more-nopo/nopo-plugin-terraform@workspace:nopo/plugins/terraform"],
+
+    "@more-nopo/nopo-plugin-vitest": ["@more-nopo/nopo-plugin-vitest@workspace:nopo/plugins/vitest"],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 

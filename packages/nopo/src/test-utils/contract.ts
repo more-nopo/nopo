@@ -84,14 +84,17 @@ export function runContractTable(cases: ContractCase[]): void {
 
 /** The contract test suite predates that flip and asserts on JSON shape via
  * `parsePrintPlan`. To keep every existing case green without per-case argv churn, we
- * auto-append `--json` whenever the test argv includes `--print` but not `--json`. Cases
+ * insert `--json` before the separator when core argv includes `--print` but not `--json`. Cases
  * that want to lock in the new rendered output set `printRendered: true` to skip
  */
 function maybeInjectJsonFlag(c: ContractCase): string[] {
   if (c.printRendered === true) return c.argv;
-  if (!c.argv.includes("--print")) return c.argv;
-  if (c.argv.includes("--json")) return c.argv;
-  return [...c.argv, "--json"];
+  const separator = c.argv.indexOf("--");
+  const end = separator < 0 ? c.argv.length : separator;
+  const controls = c.argv.slice(0, end);
+  if (!controls.includes("--print") || controls.includes("--json"))
+    return c.argv;
+  return [...controls, "--json", ...c.argv.slice(end)];
 }
 
 /** For any case that ran `--print` and produced a parseable JSON document on stdout,

@@ -10,6 +10,10 @@ plugins:
     path: ./nopo/plugins/terraform/src/index.ts
   - name: playwright
     path: ./nopo/plugins/playwright/src/index.ts
+  - name: bun
+    path: ./nopo/plugins/bun/src/index.ts
+  - name: vitest
+    path: ./nopo/plugins/vitest/src/index.ts
   - name: sonar
     path: ./nopo/plugins/sonar/src/index.ts
   - name: diff

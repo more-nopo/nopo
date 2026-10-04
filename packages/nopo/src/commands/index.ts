@@ -22,6 +22,8 @@ export interface ResolvedCommand {
   service: string;
   command: string;
   executable: string;
+  plugin?: string;
+  args?: string[];
   env?: Record<string, string>;
   dir?: string; // "root", absolute path, or relative to service
   context?: CommandContext; // "host" (default) or "container"
@@ -356,12 +358,15 @@ export function resolveCommand(
   // Literal colon-in-key declarations (`test:integration:` as one key) win
   // before the selector grammar gets a look — they are a single name.
   const literal = service.commands[commandName];
-  if (literal?.command) {
+  if (literal && (literal.command || literal.plugin)) {
     return [
       {
         service: serviceId,
         command: commandName,
-        executable: literal.command,
+        executable: literal.command ?? "",
+        ...(literal.plugin
+          ? { plugin: literal.plugin, args: literal.args ?? [] }
+          : {}),
         env: literal.env,
         dir: literal.dir,
         context: literal.context,
@@ -405,12 +410,15 @@ export function resolveCommand(
   }
 
   // Simple command with executable
-  if (command.command) {
+  if (command.command || command.plugin) {
     return [
       {
         service: serviceId,
         command: commandName,
-        executable: command.command,
+        executable: command.command ?? "",
+        ...(command.plugin
+          ? { plugin: command.plugin, args: command.args ?? [] }
+          : {}),
         env: command.env,
         dir: command.dir,
         context: command.context,
@@ -496,12 +504,15 @@ function resolveSubCommandPath(
   }
 
   // Single command
-  if (current.command) {
+  if (current.command || current.plugin) {
     return [
       {
         service: serviceId,
         command: currentPath,
-        executable: current.command,
+        executable: current.command ?? "",
+        ...(current.plugin
+          ? { plugin: current.plugin, args: current.args ?? [] }
+          : {}),
         env: current.env ? { ...inheritedEnv, ...current.env } : inheritedEnv,
         dir: current.dir || inheritedDir,
         context: current.context || inheritedContext,
@@ -552,11 +563,14 @@ function flattenSubCommands(
           effectiveContext,
         ),
       );
-    } else if (subCmd.command) {
+    } else if (subCmd.command || subCmd.plugin) {
       result.push({
         service: serviceId,
         command: cmdPath,
-        executable: subCmd.command,
+        executable: subCmd.command ?? "",
+        ...(subCmd.plugin
+          ? { plugin: subCmd.plugin, args: subCmd.args ?? [] }
+          : {}),
         env: mergedEnv,
         dir: effectiveDir,
         context: effectiveContext,
@@ -772,6 +786,29 @@ export function buildExecutionPlan(
     );
   }
 
+  // Resolve every delegated leaf, including dependencies, before executing any node.
+  for (const task of allTasks.values()) {
+    if (!task.plugin) continue;
+    const prefix = `${task.service}:${task.command}`;
+    const plugin = project.plugins.find(
+      (p) => p.definition.name === task.plugin,
+    )?.definition;
+    if (!plugin)
+      throw new Error(`${prefix}: Plugin '${task.plugin}' is not loaded.`);
+    const name = task.executable || plugin.defaultCommand;
+    if (!name) {
+      throw new Error(
+        `${prefix}: Plugin '${task.plugin}' has no default command. Specify 'command' explicitly.`,
+      );
+    }
+    if (!plugin.commands?.some((command) => command.name === name)) {
+      throw new Error(
+        `${prefix}: Plugin '${task.plugin}' has no command '${name}'.`,
+      );
+    }
+    task.executable = name;
+  }
+
   // Build dependency graph for topological sort
   const graph = new Map<string, Set<string>>();
   const inDegree = new Map<string, number>();
@@ -891,14 +928,25 @@ function collectDepsOnlySubcommands(
   const result: string[] = [];
   for (const [name, sub] of Object.entries(node.commands)) {
     const subPath = `${commandPath}:${name}`;
-    if (sub.deps && sub.deps.length > 0 && !sub.command && !sub.commands) {
+    if (
+      sub.deps &&
+      sub.deps.length > 0 &&
+      !sub.command &&
+      !sub.plugin &&
+      !sub.commands
+    ) {
       result.push(subPath);
     }
     // Recurse into nested subcommands
     if (sub.commands) {
       for (const [subName, subSub] of Object.entries(sub.commands)) {
         const subSubPath = `${subPath}:${subName}`;
-        if (subSub.deps && subSub.deps.length > 0 && !subSub.command) {
+        if (
+          subSub.deps &&
+          subSub.deps.length > 0 &&
+          !subSub.command &&
+          !subSub.plugin
+        ) {
           result.push(subSubPath);
         }
       }
