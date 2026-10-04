@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 import {
+  assertTerraformVolumesMatchDeclared,
   declaredVolumesForService,
   type ServiceManifest,
   SOURCE_CONFIGMAP_SIZE_LIMIT_BYTES,
+  terraformVolumeStorageClasses,
   yamlDeclaredPvc,
   yamlDeployment,
   yamlSourceConfigMap,
@@ -131,6 +133,111 @@ describe("yamlDeclaredPvc", () => {
     const bMeta = b.metadata as { name: string };
     expect(aMeta.name).toBe("sonar-data");
     expect(bMeta.name).toBe("other-data");
+  });
+
+  it("omits storageClassName when the field is absent", () => {
+    const yaml = yamlDeclaredPvc("grafana", "data", "1Gi", "nopo-prod");
+    const doc = parseDoc(yaml);
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- runtime-shaped YAML
+    const spec = doc.spec as Record<string, unknown>;
+    expect(spec).not.toHaveProperty("storageClassName");
+    expect(yaml).not.toContain("storageClassName");
+    expect(yaml).not.toContain("null");
+    expect(doc).toMatchObject({
+      metadata: { name: "grafana-data" },
+      spec: {
+        accessModes: ["ReadWriteOnce"],
+        resources: { requests: { storage: "1Gi" } },
+      },
+    });
+  });
+
+  it("emits storageClassName when the plugin sets one", () => {
+    const yaml = yamlDeclaredPvc(
+      "grafana",
+      "data",
+      "1Gi",
+      "nopo-prod",
+      "longhorn",
+    );
+    const doc = parseDoc(yaml);
+    expect(doc).toMatchObject({
+      metadata: { name: "grafana-data", namespace: "nopo-prod" },
+      spec: {
+        storageClassName: "longhorn",
+        accessModes: ["ReadWriteOnce"],
+        resources: { requests: { storage: "1Gi" } },
+      },
+    });
+  });
+
+  it("rejects a storage class that would break the YAML scalar", () => {
+    expect(() =>
+      yamlDeclaredPvc("grafana", "data", "1Gi", "ns", "longhorn\n  evil: true"),
+    ).toThrow(/storageClassName/);
+  });
+});
+
+describe("plugins.terraform.volumes storageClassName", () => {
+  function serviceWithTerraform(terraform: unknown): NormalizedService {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- pluginData stub
+    return {
+      id: "grafana",
+      pluginData: { terraform },
+    } as unknown as NormalizedService;
+  }
+
+  it("reads storageClassName for a matching volume", () => {
+    const classes = terraformVolumeStorageClasses(
+      serviceWithTerraform({
+        volumes: [{ name: "data", storageClassName: "longhorn" }],
+      }),
+    );
+    expect(classes.get("data")).toBe("longhorn");
+  });
+
+  it("returns an empty map when plugins.terraform.volumes is absent", () => {
+    expect(
+      terraformVolumeStorageClasses(serviceWithTerraform({})).size,
+    ).toBe(0);
+  });
+
+  it("omits the class when the field is absent or null", () => {
+    const absent = terraformVolumeStorageClasses(
+      serviceWithTerraform({ volumes: [{ name: "data" }] }),
+    );
+    const nulled = terraformVolumeStorageClasses(
+      serviceWithTerraform({
+        volumes: [{ name: "data", storageClassName: null }],
+      }),
+    );
+    expect(absent.has("data")).toBe(true);
+    expect(absent.get("data")).toBeUndefined();
+    expect(nulled.get("data")).toBeUndefined();
+  });
+
+  it("rejects a duplicate volume name", () => {
+    expect(() =>
+      terraformVolumeStorageClasses(
+        serviceWithTerraform({
+          volumes: [
+            { name: "data", storageClassName: "longhorn" },
+            { name: "data", storageClassName: "local-path" },
+          ],
+        }),
+      ),
+    ).toThrow(/lists "data" more than once/);
+  });
+
+  it("rejects a volume name that is not a declared size-mode volume", () => {
+    const classes = terraformVolumeStorageClasses(
+      serviceWithTerraform({
+        volumes: [{ name: "graf-data", storageClassName: "longhorn" }],
+      }),
+    );
+    expect(() =>
+      assertTerraformVolumesMatchDeclared("grafana", classes, ["data"]),
+    ).toThrow(/graf-data/);
   });
 });
 
