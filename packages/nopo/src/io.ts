@@ -1,5 +1,6 @@
 import { spawn as childSpawn, type SpawnOptions } from "node:child_process";
 import process from "node:process";
+import { constants } from "node:os";
 import type { Readable } from "node:stream";
 
 import { trackChild } from "./child-registry.ts";
@@ -156,9 +157,10 @@ class RealIO implements IO {
         reject(err);
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
         resolve({
-          exitCode: code ?? 0,
+          exitCode:
+            code ?? (signal ? 128 + (constants.signals[signal] ?? 0) : 1),
           stdout: Buffer.concat(stdoutChunks).toString(),
           stderr: Buffer.concat(stderrChunks).toString(),
         });

@@ -1,5 +1,11 @@
 # @more-nopo/nopo
 
+## 0.1.1
+
+### Patch Changes
+
+- Preserve signal termination as a nonzero subprocess exit status instead of reporting successful completion. Runner shutdown policy cannot accept cancellation or OOM as clean tests.
+
 ## 0.1.0
 
 ### Minor Changes
