@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-terraform
 
+## 0.0.4
+
+### Patch Changes
+
+- 2c22d67: Add optional `plugins.terraform.volumes[].storageClassName` on declared volume claims. The claim name stays `${serviceId}-${volumeName}`. Omit `storageClassName` when the field is absent. Do not emit null.
+
 ## 0.0.3
 
 ### Patch Changes
