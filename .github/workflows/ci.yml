@@ -18,6 +18,8 @@ jobs:
       - run: bun run --cwd nopo/plugins/vitest check
       - run: bun run --cwd nopo/plugins/bun test
       - run: bun run --cwd nopo/plugins/vitest test
+      - run: nopo/plugins/vitest/node_modules/.bin/tsc --project nopo/prototypes/jev-ranking/tsconfig.json
+      - run: nopo/plugins/vitest/node_modules/.bin/vitest run --config nopo/prototypes/jev-ranking/vitest.config.ts
 
   platforms:
     if: github.event_name == 'merge_group'
@@ -34,3 +36,5 @@ jobs:
       - run: nopo test
       - run: bun run --cwd nopo/plugins/bun test
       - run: bun run --cwd nopo/plugins/vitest test
+      - run: nopo/plugins/vitest/node_modules/.bin/tsc --project nopo/prototypes/jev-ranking/tsconfig.json
+      - run: nopo/plugins/vitest/node_modules/.bin/vitest run --config nopo/prototypes/jev-ranking/vitest.config.ts

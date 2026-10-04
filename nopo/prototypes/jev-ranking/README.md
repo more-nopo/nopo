@@ -33,7 +33,7 @@ nopo test my-target
 ```
 
 Without `NOPO_JEV_REPORT_DIR`, the decorator immediately delegates to the original
-plugin. The default comparison base is `HEAD`; choose a PR base explicitly for
+plugin. The default provider is `mock`; live API use requires explicit `jev`. The default comparison base is `HEAD`; choose a PR base explicitly for
 committed changes. Reports use unique filenames so concurrent targets do not
 overwrite each other. Remove the temporary plugin paths after experimenting.
 
@@ -56,17 +56,28 @@ run. The fingerprint is diagnostic, not a reusable cache key.
 
 ## Runner boundaries
 
-| Runner path                            | Candidate inventory                                                | Limits                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Delegated Vitest `run`                 | Native `vitest list --filesOnly --json`, same config and arguments | Loads config a second time; unsupported listing arguments fail open                         |
-| Delegated Bun `test`                   | Bun filename patterns under the target's `bunfig.toml` test root   | Advisory only: does not reproduce argv filters, sharding, name filters, or config overrides |
-| Bun `run`, wrappers, direct plugin CLI | Not instrumented                                                   | Existing execution is unchanged                                                             |
+The prototype intercepts the resolved subprocess through Nopo's existing IO
+interface. This is experiment wiring, not a new public hook or plugin protocol.
+Both delegated target commands and direct plugin commands are covered. `--print`,
+Bun `run`/`build`, and Vitest `list` do not trigger ranking.
 
-Vitest owns its eligible files. Bun has no native listing command, so its inventory
-cannot justify exclusion. The consumer's af-api shutdown wrapper, af-web quarantine
-audit, and austin-piano shard wrapper remain their policy owners; integrating
-ranking into those paths needs an explicit adapter before their native test run.
-This prototype does not yet cover the large af-api integration workload.
+| Runner       | Inventory                                                                                | Limits                                                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Vitest `run` | Native `list --filesOnly --json` with the resolved config, including quarantine overlays | Pre-shard files, not individual test cases; loads config again; discovery timeout 10 seconds                             |
+| Bun `test`   | Pattern inventory after profiles and `--files` resolve, with path filters                | Advisory: test names, custom loaders and inherited configuration may differ; unfamiliar options make ranking unavailable |
+
+The released plugins own shutdown, quarantine and shard policies. Gate and audit
+invocations get separate reports; the audit remains mandatory. An empty clamped
+shard does not spawn tests and produces no report. The prototype preserves the
+native exit result, including `nothrow` calls whose results the runner policy then
+interprets. Reports record native exits, not final policy outcomes: an audit exit
+of 1 can be expected and a passing quarantined test can still fail the command.
+
+Each report measures discovery, context gathering, scoring and native execution
+wall time. Observation runs before execution. `observationMs` is added work,
+excluding report writing, not saved time. Discovery failure, invalid scores,
+missing credentials and report-write failures retain the original execution.
+The report never estimates time saved from file counts or mock probabilities.
 
 Evidence includes tracked changes since the merge base, untracked filenames, and
 Nopo's target dependencies. It does not contain a file-level import graph or
@@ -77,24 +88,60 @@ files are unknown. IDs, response types, and probability bounds are validated.
 
 ## Proposed product shape
 
-If the experiment is useful, keep the feature inside each runner plugin and add
-one opt-in plugin config field, `relevance: observe`. This is a proposal, not a
-supported option. The plugins can share an internal evidence/scoring library;
-core continues to own only command delegation and execution context. No command
-needs to interpret model output or template a file list.
+Use one shared internal relevance library and a small adapter in each runner
+plugin. Do not introduce a separately registered plugin for plugins. The shared
+library owns diff/graph evidence, bounded provider calls, score validation and
+fallbacks. The runner owns candidate discovery, protected tests, native file
+selection and execution. Jev is one provider, not the command interface.
 
-Before considering filtering, collect runner duration, ranking overhead, and
-scores alongside full-suite outcomes. Replay known regressions or use mutation
-tests: mostly green PRs cannot establish that excluded tests would catch failures.
-Evaluate missed regressions on held-out changes and calibrate scores for this
-repository. Changes to harnesses, manifests, configs, missing evidence, and changed
-tests need conservative full-run rules. Selection would have to precede sharding
-and preserve wrapper policy. This experiment claims no CI time savings.
+A future internal contract can stay small:
+
+```ts
+type Relevance = {
+  status: "ranked" | "unavailable";
+  tests: Array<{ file: string; probability: number | null }>;
+};
+// Runner supplies its eligible candidates; this function never executes tests.
+rankTests(evidence, candidates): Promise<Relevance>;
+```
+
+If the experiment proves useful, configure it once in each runner registration:
+
+```yaml
+plugins:
+  - name: vitest
+    config:
+      test:
+        relevance: observe
+  - name: bun
+    config:
+      test:
+        relevance: observe
+```
+
+**This YAML is a proposal, not a supported option.** Target commands stay as they
+are. For distribution, both plugins can depend on the same internal package;
+Nopo core needs no new hook result DTO, template syntax or file-scope API.
+
+Before filtering, record real scores, per-file durations and full-suite failures
+for representative changes. Replay known regressions or mutation tests; mostly
+green PRs cannot establish that excluded tests would catch failures. Compare
+against runner-native affected tests and a full-suite baseline. Account for the
+CI DAG's critical path: skipping cheap files in a parallel job may save no wall
+time, while extra discovery and scoring always cost something.
+
+A future selection policy should run before sharding, retain changed/unknown and
+protected tests, retain full suites for harness/config/manifest changes, and
+leave quarantine audits mandatory. Native candidate identity and exact filtering
+must be established for each runner before that runner can exclude tests. This
+prototype only ranks, and claims no predictive accuracy or CI time savings.
 
 ## Files and checks
 
 - `vitest.ts`, `bun.ts`: decorate the actual plugin factories.
-- `plugin.ts`: runner discovery, reports, unchanged execution.
+- `plugin.ts`: observe resolved native invocations without changing execution.
+- `discovery.ts`: runner-specific inventory adapters.
+- `observe.ts`: shared ranking/report pipeline and timing measurements.
 - `evidence.ts`: bounded diff, target graph, candidate excerpts.
 - `score.ts`: mock provider and validated Jev API adapter.
 - `smoke.test.ts`: real CLI/runner fixtures plus API contract validation.
@@ -108,10 +155,13 @@ nopo/plugins/vitest/node_modules/.bin/tsc --project nopo/prototypes/jev-ranking/
 
 The smoke tests verify that both runners execute every file with mock scores,
 missing credentials retain full execution and test failures, and malformed Jev
-responses are rejected.
+responses are rejected. They also cover Bun profiles and explicit replacement,
+Vitest quarantine with clamped shards, direct commands, print-only commands,
+disabled observation and unsupported Bun discovery options.
 
 ## References
 
 - [Jev API](https://docs.typesafe.ai/api) and [noul probability primitive](https://docs.typesafe.ai/primitives/noul).
+- [Vitest CLI and native listing](https://vitest.dev/guide/cli.html).
 - [Bun test discovery](https://bun.com/docs/test/discovery).
 - [jev-test-impact](https://github.com/holasoymalva/jev-test-impact), the related experiment that prompted this exploration.

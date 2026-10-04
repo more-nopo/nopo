@@ -89,8 +89,13 @@ function fixture(runner: "bun" | "vitest") {
   );
   return root;
 }
-function run(root: string, provider = "mock") {
-  const r = spawnSync("bun", [cli, "test", "demo"], {
+function run(
+  root: string,
+  provider = "mock",
+  argv = ["test", "demo"],
+  enabled = true,
+) {
+  const r = spawnSync("bun", [cli, ...argv], {
     cwd: root,
     encoding: "utf8",
     timeout: 30000,
@@ -100,7 +105,7 @@ function run(root: string, provider = "mock") {
       DOCKER_PORT: "80",
       ROOT_DIR: root,
       NOPO_JEV_PROVIDER: provider,
-      NOPO_JEV_REPORT_DIR: path.join(root, "reports"),
+      NOPO_JEV_REPORT_DIR: enabled ? path.join(root, "reports") : "",
       TYPESAFE_API_KEY: "",
     },
   });
@@ -215,4 +220,139 @@ it("uses Jev's typed question contract and rejects missing, unknown, and invalid
     return Response.json({ answers: { abc: { type: "noul", noul: 0.25 } } });
   });
   expect(result.get("abc")).toBe(0.25);
+});
+
+function reports(root: string) {
+  return readdirSync(path.join(root, "reports")).map((file) =>
+    JSON.parse(readFileSync(path.join(root, "reports", file), "utf8")),
+  );
+}
+function configure(root: string, update: (config: any) => void) {
+  const file = path.join(root, "apps/demo/nopo.yml");
+  const config = JSON.parse(readFileSync(file, "utf8"));
+  update(config);
+  writeFileSync(file, JSON.stringify(config));
+}
+it("Bun ranks resolved profile files and respects explicit replacement", () => {
+  const root = fixture("bun");
+  configure(root, (config) => {
+    config.plugins = {
+      bun: {
+        test: {
+          profiles: {
+            unit: { args: ["--timeout=3000"], files: ["./one.test.ts"] },
+          },
+        },
+      },
+    };
+    config.commands.test.args = ["--profile=unit"];
+  });
+  let result = run(root);
+  expect(result.status, result.output).toBe(0);
+  expect(reports(root)[0].ranking.map((row: any) => row.file)).toEqual([
+    "apps/demo/one.test.ts",
+  ]);
+  expect(
+    readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8").trim(),
+  ).toBe("one");
+  rmSync(path.join(root, "reports"), { recursive: true });
+  configure(root, (config) => {
+    config.commands.test.args.push("--files", "two.test.ts");
+  });
+  result = run(root);
+  expect(result.status, result.output).toBe(0);
+  expect(reports(root)[0].ranking.map((row: any) => row.file)).toEqual([
+    "apps/demo/two.test.ts",
+  ]);
+});
+it("Vitest observes gate and mandatory quarantine audit separately after shard clamping", () => {
+  const root = fixture("vitest");
+  const file = path.join(root, "apps/demo/three.test.ts");
+  writeFileSync(
+    file,
+    readFileSync(file, "utf8").replace(
+      "expect(1).toBe(1)",
+      "expect(1).toBe(2)",
+    ),
+  );
+  writeFileSync(
+    path.join(root, "apps/demo/quarantine.json"),
+    JSON.stringify({ files: { "three.test.ts": "fixture failure" } }),
+  );
+  configure(root, (config) => {
+    config.plugins = {
+      vitest: { test: { quarantine: "quarantine.json", sharding: "clamp" } },
+    };
+    config.commands.test.args.push("--shard=1/8");
+  });
+  const baseline = run(root, "mock", ["test", "demo"], false);
+  expect(baseline.status, baseline.output).toBe(0);
+  const before = readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8");
+  rmSync(path.join(root, "apps/demo/ran.txt"));
+  const result = run(root);
+  expect(result.status, result.output).toBe(0);
+  expect(result.output).toContain("still fail as expected");
+  const observed = reports(root);
+  expect(observed).toHaveLength(2);
+  const audit = observed.find((report) => report.exitCode === 1);
+  const gate = observed.find((report) => report.exitCode === 0);
+  expect(audit.ranking.map((row: any) => row.file)).toEqual([
+    "apps/demo/three.test.ts",
+  ]);
+  expect(gate.ranking).toHaveLength(2);
+  expect(
+    readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+      .trim()
+      .split("\n"),
+  ).toEqual(before.trim().split("\n"));
+  expect(gate.ranking[0].file).not.toBe("apps/demo/three.test.ts");
+  expect(
+    observed.every(
+      (report) => report.skippedFiles === 0 && report.timings.executionMs > 0,
+    ),
+  ).toBe(true);
+});
+for (const runner of ["bun", "vitest"] as const) {
+  it(`${runner}: direct plugin invocation ranks and print does not execute`, () => {
+    const root = fixture(runner);
+    const command = runner === "bun" ? "test" : "run";
+    const preview = run(root, "mock", [runner, command, "demo", "--print"]);
+    expect(preview.status, preview.output).toBe(0);
+    expect(readdirSync(root)).not.toContain("reports");
+    const result = run(root, "mock", [
+      runner,
+      command,
+      "demo",
+      "--",
+      "./two.test.ts",
+    ]);
+    expect(result.status, result.output).toBe(0);
+    expect(reports(root)[0].ranking.map((row: any) => row.file)).toEqual([
+      "apps/demo/two.test.ts",
+    ]);
+  });
+}
+it("Bun unknown discovery options do not prevent native execution", () => {
+  const root = fixture("bun");
+  configure(root, (config) => {
+    config.commands.test.args = ["--bail"];
+  });
+  const result = run(root);
+  expect(result.status, result.output).toBe(0);
+  expect(reports(root)[0]).toMatchObject({
+    status: "unavailable",
+    reason: "discovery-unavailable",
+    exitCode: 0,
+  });
+  expect(
+    readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+      .trim()
+      .split("\n"),
+  ).toHaveLength(3);
+});
+it("disabled observation produces no report and retains execution", () => {
+  const root = fixture("vitest");
+  const result = run(root, "mock", ["test", "demo"], false);
+  expect(result.status, result.output).toBe(0);
+  expect(readdirSync(root)).not.toContain("reports");
 });
