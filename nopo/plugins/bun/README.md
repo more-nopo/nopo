@@ -8,16 +8,16 @@ plugins:
   - name: bun
 ```
 
-The plugin's default is `test`. Delegate without repeating the target's name:
+The plugin's default is `run`. Delegate without repeating the target's name:
 
 ```yaml
 # Target nopo.yml
 commands:
   test:
     plugin: bun
+    command: test
   lint:
     plugin: bun
-    command: run
     args: [lint]
   bundle:
     plugin: bun
@@ -42,9 +42,11 @@ commands:
     commands:
       unit:
         plugin: bun
+        command: test
         args: ["./src/", "--timeout=30000"]
       integration:
         plugin: bun
+        command: test
         args: ["./test/", "--timeout=30000"]
 ```
 

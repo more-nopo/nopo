@@ -11,7 +11,7 @@ Delegated commands retain target scope, dependencies, environment, and directory
 
 Add Vitest run/list commands and Bun test/run/build commands. Vitest defaults to
 run and supports a single native invocation across selected targets; Bun defaults
-to test and preserves each target's native working directory and configuration.
+to run and preserves each target's native working directory and configuration.
 
 Plugin contexts expose raw argv and forwarded arguments. Boolean and equals-style
 plugin options preserve following targets.

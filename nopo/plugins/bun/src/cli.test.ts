@@ -50,11 +50,15 @@ function fixture() {
           test: {
             env: { VALUE: "command-" + name },
             commands: {
-              unit: { plugin: "bun", args: ["./src/"] },
-              integration: { plugin: "bun", args: ["./test/"] },
+              unit: { plugin: "bun", command: "test", args: ["./src/"] },
+              integration: {
+                plugin: "bun",
+                command: "test",
+                args: ["./test/"],
+              },
             },
           },
-          script: { plugin: "bun", command: "run", args: ["./script.ts"] },
+          script: { plugin: "bun", args: ["./script.ts"] },
           bundle: {
             plugin: "bun",
             command: "build",
@@ -120,7 +124,7 @@ function records(
 }
 
 describe("real nopo → Bun", () => {
-  it("defaults to test with native filters, preload and command environment", () => {
+  it("runs explicit test commands with native filters, preload and command environment", () => {
     const root = fixture();
     const r = run(root, "test:unit", "beta", "--", "--timeout=10000");
     expect(r.code, r.output).toBe(0);
@@ -140,7 +144,9 @@ describe("real nopo → Bun", () => {
       JSON.stringify({
         name: "alpha",
         env: { VALUE: "$NOPO_SOURCE_VALUE" },
-        commands: { test: { plugin: "bun", args: ["./src/"] } },
+        commands: {
+          test: { plugin: "bun", command: "test", args: ["./src/"] },
+        },
       }),
     );
     const result = run(root, "test", "alpha");
@@ -153,7 +159,7 @@ describe("real nopo → Bun", () => {
     expect(r.code, r.output).toBe(0);
     expect(records(root).map((r) => r.kind)).toEqual(["test"]);
   });
-  it("runs a script with argv boundaries preserved", () => {
+  it("defaults to run with argv boundaries preserved", () => {
     const root = fixture();
     const r = run(root, "script", "alpha", "--", "a b", "$(touch unsafe)");
     expect(r.code, r.output).toBe(0);
@@ -225,7 +231,7 @@ describe("real nopo → Bun", () => {
       JSON.stringify({
         name: "alpha",
         plugins: { bun: false },
-        commands: { test: { plugin: "bun" } },
+        commands: { test: { plugin: "bun", command: "test" } },
       }),
     );
     const r = run(root, "test", "alpha");

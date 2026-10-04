@@ -54,8 +54,8 @@ may declare an explicit default command; missing defaults or command references
 fail validation before execution. See [command configuration](nopo/docs/cli/commands/config.md).
 
 The [Vitest plugin](nopo/plugins/vitest/README.md) provides `run` (default) and
-`list`. The [Bun plugin](nopo/plugins/bun/README.md) provides `test` (default),
-`run`, and `build`, independently of Bun package-manager configuration.
+`list`. The [Bun plugin](nopo/plugins/bun/README.md) provides `run` (default),
+`test`, and `build`, independently of Bun package-manager configuration.
 
 ```bash
 nopo vitest run web ui

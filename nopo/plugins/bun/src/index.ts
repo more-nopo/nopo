@@ -110,7 +110,7 @@ const bunPlugin: NopoPluginFactory = (raw) => {
   const project = projectSchema.parse(raw);
   return {
     name: "bun",
-    defaultCommand: "test",
+    defaultCommand: "run",
     description: "Run Bun tests, scripts, and builds in nopo targets",
     configSchema: { project: projectSchema, service: targetSchema },
     commands: (["test", "run", "build"] as const).map((command) => ({
