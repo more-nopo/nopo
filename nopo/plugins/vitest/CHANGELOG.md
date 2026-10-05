@@ -1,5 +1,21 @@
 # @more-nopo/nopo-plugin-vitest
 
+## 0.3.0
+
+### Minor Changes
+
+- 7bb536e: Expose a bounded System One decision client to core commands and plugins, including lazy credentials, typed question/answer validation and exact-request replay. Add opt-in test relevance observation to Vitest and Bun through a shared implementation while retaining native full-suite execution.
+
+  Print per-test relevance scores in runner logs and publish readable CI evaluation tables with mode provenance, mutation outcomes, timings and counterfactual selection counts.
+
+  Add explicit dry and select relevance modes with configurable inclusive thresholds, CLI overrides, native file selection, and full-suite fallback. Preserve mandatory quarantine audit execution. Relevance remains disabled by default.
+
+### Patch Changes
+
+- Updated dependencies [7bb536e]
+  - @more-nopo/nopo@0.2.0
+  - @more-nopo/nopo-test-relevance@0.0.1
+
 ## 0.2.0
 
 ### Minor Changes

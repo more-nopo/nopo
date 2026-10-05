@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-docs",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@more-nopo/nopo": "^0.1.0"
+    "@more-nopo/nopo": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.0",

@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-vitest",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -11,7 +11,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@more-nopo/nopo": "^0.1.1",
+    "@more-nopo/nopo": "^0.2.0",
     "zod": "^3.24.2",
     "@more-nopo/nopo-test-relevance": "workspace:^"
   },

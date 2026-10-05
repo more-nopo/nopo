@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-diff",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -11,7 +11,7 @@
     "test": "bun test src/"
   },
   "dependencies": {
-    "@more-nopo/nopo": "^0.1.0",
+    "@more-nopo/nopo": "^0.2.0",
     "picomatch": "^4.0.0"
   },
   "devDependencies": {
