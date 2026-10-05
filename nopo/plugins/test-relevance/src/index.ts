@@ -7,6 +7,18 @@ import type {
   DecisionResult,
 } from "@more-nopo/nopo/decisions";
 import type { HookContext } from "@more-nopo/nopo/plugin";
+import {
+  relevanceOptions,
+  type RelevanceOptions,
+  type TestSelection,
+} from "./options.ts";
+export {
+  relevanceSchema,
+  relevanceOptions,
+  relevanceArgs,
+  vitestSelectionArgs,
+} from "./options.ts";
+export type { RelevanceOptions, TestSelection } from "./options.ts";
 import { evidence, type Evidence } from "./evidence.ts";
 export { evidence } from "./evidence.ts";
 export type { Evidence } from "./evidence.ts";
@@ -57,11 +69,7 @@ export async function rankTests(input: Evidence, decisions: DecisionClient) {
   const scores = new Map<string, number>();
   const failures: string[] = [];
   const responses: Extract<DecisionResult, { status: "ok" }>[] = [];
-  for (
-    let start = 0;
-    start < input.candidates.length;
-    start += 32
-  ) {
+  for (let start = 0; start < input.candidates.length; start += 32) {
     const result = await decisions.evaluate(relevanceRequest(input, start));
     if (result.status !== "ok") {
       failures.push(result.reason);
@@ -94,18 +102,22 @@ export async function rankTests(input: Evidence, decisions: DecisionClient) {
 export async function observeTestRun<T extends { exitCode: number }>(
   ctx: HookContext,
   options: {
-    relevance?: "off" | "observe";
+    relevance?: RelevanceOptions;
+    mandatory?: boolean;
     runner: "bun" | "vitest";
     cwd: string;
   },
   discover: () => Promise<Inventory>,
-  execute: () => PromiseLike<T>,
+  execute: (selection?: TestSelection) => PromiseLike<T>,
 ): Promise<T> {
-  if (options.relevance !== "observe") return await execute();
+  const configured = relevanceOptions(options.relevance);
+  if (configured.mode === "off") return await execute();
+  let selection: TestSelection | undefined;
   const started = performance.now();
   const report: Record<string, unknown> = {
     schemaVersion: 1,
-    mode: "observe",
+    mode: configured.mode,
+    threshold: configured.threshold,
     runner: options.runner,
     target:
       ctx.commandContext?.target ??
@@ -148,6 +160,35 @@ export async function observeTestRun<T extends { exitCode: number }>(
     report.failures = ranked.failures;
     report.models = [...new Set(ranked.responses.map((r) => r.model))];
     report.status = ranked.failures.length ? "unavailable" : "ranked";
+    const included = ranked.ranking
+      .filter(
+        (row) =>
+          row.probability === null || row.probability >= configured.threshold,
+      )
+      .map((row) => path.resolve(ctx.runner.config.root, row.file));
+    const excluded = ranked.ranking
+      .filter(
+        (row) =>
+          row.probability !== null && row.probability < configured.threshold,
+      )
+      .map((row) => path.resolve(ctx.runner.config.root, row.file));
+    report.wouldInclude = included;
+    report.wouldExclude = excluded;
+    if (
+      configured.mode === "select" &&
+      !options.mandatory &&
+      !ranked.failures.length &&
+      !ranked.unscored &&
+      !input.diffTruncated &&
+      !input.modules.truncated
+    ) {
+      selection = { included, excluded };
+      report.execution = "selected";
+      report.skippedFiles = excluded.length;
+    } else if (configured.mode === "select")
+      report.fallback = options.mandatory
+        ? "mandatory-audit"
+        : "incomplete-evidence-or-scores";
   } catch {
     timings[`${phase}Ms`] = performance.now() - phaseStart;
     report.reason = `${phase}-unavailable`;
@@ -155,7 +196,7 @@ export async function observeTestRun<T extends { exitCode: number }>(
   timings.observationMs = performance.now() - started;
   const executionStart = performance.now();
   try {
-    const result = await execute();
+    const result = await execute(selection);
     report.exitCode = result.exitCode;
     return result;
   } catch (error) {
@@ -189,14 +230,14 @@ export async function observeTestRun<T extends { exitCode: number }>(
           `[relevance] ${row.probability === null ? "unscored" : row.probability.toFixed(3)} ${JSON.stringify(row.file)}\n`,
         );
       ctx.io.stderr.write(
-        "[relevance] Scores estimate relevance, not calibrated failure risk; observe mode skips 0 files.\n",
+        `[relevance] Scores estimate relevance, not calibrated failure risk; ${configured.mode} mode skips ${report.skippedFiles} files; threshold ${configured.threshold}; would exclude ${((report.wouldExclude ?? []) as string[]).length}.\n`,
       );
       ctx.io.stderr.write(
-        `[relevance] ${report.status}; full suite retained; report: ${file}\n`,
+        `[relevance] ${report.status}; ${report.execution === "selected" ? "threshold selection applied" : "full suite retained"}; report: ${file}\n`,
       );
     } catch {
       ctx.io.stderr.write(
-        "[relevance] report unavailable; full suite retained\n",
+        `[relevance] report unavailable; ${report.execution === "selected" ? "threshold selection applied" : "full suite retained"}\n`,
       );
     }
   }
