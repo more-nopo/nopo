@@ -1,5 +1,11 @@
 # @more-nopo/nopo-test-relevance
 
+## 0.0.3
+
+### Patch Changes
+
+- a2496f2: Use registry-compatible internal dependency ranges so published test plugins install outside this workspace. Support runner-scoped relevance environment opt-in for CI jobs containing multiple test runners; explicit CLI flags take precedence.
+
 ## 0.0.2
 
 ### Patch Changes

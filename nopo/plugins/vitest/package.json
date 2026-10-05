@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-vitest",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -13,7 +13,7 @@
   "dependencies": {
     "@more-nopo/nopo": "^0.3.0",
     "zod": "^3.24.2",
-    "@more-nopo/nopo-test-relevance": "^0.0.2"
+    "@more-nopo/nopo-test-relevance": "^0.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.16.0",
