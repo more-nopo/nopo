@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   symlinkSync,
@@ -33,7 +34,7 @@ afterEach(() =>
     .forEach((root) => rmSync(root, { recursive: true, force: true })),
 );
 function fixture(runner: "bun" | "vitest") {
-  const root = mkdtempSync(path.join(tmpdir(), "nopo-jev-"));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "nopo-jev-")));
   roots.push(root);
   mkdirSync(path.join(root, "apps/demo"), { recursive: true });
   mkdirSync(path.join(root, "node_modules"));
@@ -48,7 +49,7 @@ function fixture(runner: "bun" | "vitest") {
   );
   writeFileSync(
     path.join(root, ".gitignore"),
-    ".env\nreports/\nnode_modules/\napps/demo/ran.txt\n",
+    ".env\n.fixture-responses.json\nreports/\nnode_modules/\napps/demo/ran.txt\n",
   );
   writeFileSync(path.join(root, "package.json"), '{"type":"module"}');
   writeFileSync(
@@ -124,7 +125,9 @@ async function run(
   project.decisions = {
     baseUrl: "https://example.invalid",
     model: "fixture",
-    ...(provider === "mock" ? { mockResponses: path.join(root, ".env") } : {}),
+    ...(provider === "mock"
+      ? { mockResponses: path.join(root, ".fixture-responses.json") }
+      : {}),
   };
   writeFileSync(projectFile, JSON.stringify(project));
   if (provider === "mock") {
@@ -161,7 +164,7 @@ async function run(
       };
     }
     writeFileSync(
-      path.join(root, ".env"),
+      path.join(root, ".fixture-responses.json"),
       JSON.stringify({ schemaVersion: 1, responses }),
     );
   }
@@ -203,7 +206,7 @@ describe("ranking inside runner plugins", async () => {
           "utf8",
         ),
       );
-      expect(report).toMatchObject({
+      expect(report, JSON.stringify(report)).toMatchObject({
         mode: "observe",
 
         status: "ranked",
@@ -255,9 +258,15 @@ describe("ranking inside runner plugins", async () => {
 });
 
 function reports(root: string) {
-  return readdirSync(path.join(root, "reports")).map((file) =>
+  const result = readdirSync(path.join(root, "reports")).map((file) =>
     JSON.parse(readFileSync(path.join(root, "reports", file), "utf8")),
   );
+  for (const report of result)
+    if (report.reason !== "discovery-unavailable") {
+      expect(report.status, JSON.stringify(report)).toBe("ranked");
+      expect(report.unscored).toBe(0);
+    }
+  return result;
 }
 function configure(root: string, update: (config: any) => void) {
   const file = path.join(root, "apps/demo/nopo.yml");
