@@ -1,10 +1,24 @@
 /** Node-only coordinator. Nopo owns its lifetime through a tracked IPC channel. */
-import { writeFileSync, realpathSync } from "node:fs";
+import { writeFileSync, realpathSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 let instance;
 let signature;
 let runOutcome;
+let configFiles = [];
+let configStamp;
+function stamp() {
+  return configFiles
+    .map((file) => {
+      try {
+        const info = statSync(file);
+        return `${file}:${info.mtimeMs}:${info.ctimeMs}:${info.size}`;
+      } catch {
+        return `${file}:missing`;
+      }
+    })
+    .join("\n");
+}
 let shuttingDown = false;
 let queue = Promise.resolve();
 const originalEnv = { ...process.env };
@@ -74,7 +88,7 @@ async function handle(request) {
       env: request.env,
       options,
     });
-    if (signature !== nextSignature) {
+    if (signature !== nextSignature || configStamp !== stamp()) {
       await close();
       for (const name of Object.keys(process.env)) delete process.env[name];
       Object.assign(process.env, originalEnv, request.env);
@@ -114,6 +128,17 @@ async function handle(request) {
           }
         }
       }
+      configFiles = [
+        ...new Set(
+          [instance.vite, ...instance.projects.map((project) => project.vite)]
+            .flatMap((vite) => [
+              vite.config.configFile,
+              ...(vite.config.configFileDependencies ?? []),
+            ])
+            .filter(Boolean),
+        ),
+      ];
+      configStamp = stamp();
       signature = nextSignature;
     } else {
       // Native one-shot calls see current files even when an intervening DAG task generated source.

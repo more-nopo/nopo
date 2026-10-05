@@ -694,3 +694,24 @@ it("fails a crashed active request, cleans its workers and continues queued inde
   expect(alive(pids.worker)).toBe(false);
   expect(alive(records(root).at(-1)!.parent)).toBe(false);
 });
+
+it("reloads a native config changed between otherwise matching requests", async () => {
+  const root = fixture();
+  const dir = path.join(root, "apps", "alpha");
+  const count = path.join(root, "config-count");
+  const config = path.join(dir, "vitest.config.mjs");
+  editTarget(root, "alpha", (target) => {
+    target.commands.test = {
+      commands: {
+        first: { plugin: "vitest", args: ["one.test.js"] },
+        second: { plugin: "vitest", args: ["one.test.js"] },
+      },
+    };
+  });
+  writeFileSync(
+    path.join(dir, "one.test.js"),
+    `import {test,expect} from 'vitest';import {existsSync,writeFileSync} from 'node:fs';test('config reload',()=>{const later=existsSync(${JSON.stringify(count)});expect(process.env.TARGET).toBe(later?'changed':'alpha');writeFileSync(${JSON.stringify(count)},'1');writeFileSync(${JSON.stringify(config)},${JSON.stringify("export default {test:{include:['*.test.js'],pool:'forks',maxWorkers:1,env:{TARGET:'changed'}}};")});});`,
+  );
+  const result = await nopo(root, "test", "alpha");
+  expect(result.code, result.output).toBe(0);
+});
