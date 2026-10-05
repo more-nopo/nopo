@@ -343,25 +343,31 @@ for (const runnerName of ["vitest", "bun"] as const)
             path.join(root, "apps/demo", file),
           ),
         );
-        const request = relevanceRequest(input);
-        const answers = Object.fromEntries(
-          input.candidates.map((candidate) => [
-            candidate.id,
-            {
-              type: "noul",
-              noul: scenario.relevant.includes(path.basename(candidate.file))
-                ? 0.9
-                : 0.1,
-            },
-          ]),
-        );
-        const response = { model, answers };
+        const responses: Record<string, unknown> = {};
+        for (let start = 0; start < input.candidates.length; start += 32) {
+          const request = relevanceRequest(input, start);
+          const answers = Object.fromEntries(
+            input.candidates.slice(start, start + 32).map((candidate) => {
+              const file = path.basename(candidate.file);
+              const cohort = scenario.cohorts?.find((group) =>
+                group.files.includes(file),
+              );
+              const score = cohort
+                ? cohort.mockRange[0] +
+                  ((cohort.mockRange[1] - cohort.mockRange[0]) *
+                    cohort.files.indexOf(file)) /
+                    (cohort.files.length - 1)
+                : scenario.relevant.includes(file)
+                  ? 0.9
+                  : 0.1;
+              return [candidate.id, { type: "noul", noul: score }];
+            }),
+          );
+          responses[decisionRequestHash(model, request)] = { model, answers };
+        }
         writeFileSync(
           mockPath,
-          JSON.stringify({
-            schemaVersion: 1,
-            responses: { [decisionRequestHash(model, request)]: response },
-          }),
+          JSON.stringify({ schemaVersion: 1, responses }),
         );
       }
       const started = performance.now();
@@ -403,6 +409,7 @@ for (const runnerName of ["vitest", "bun"] as const)
       observation = {
         ranking,
         changedFiles: report.changedFiles,
+        cohorts: scenario.cohorts?.map(({ name, files }) => ({ name, files })),
         knownFailures: scenario.expectedFailures,
         observedFailures: outcomes
           .filter((row) => row.failed)
@@ -424,8 +431,8 @@ for (const runnerName of ["vitest", "bun"] as const)
         -1;
       for (const relevant of scenario.relevant) {
         assert(
-          probability(relevant) >= 0.65,
-          `${relevant}: failed recall threshold 0.65`,
+          probability(relevant) >= (scenario.cohorts ? 0.5 : 0.65),
+          `${relevant}: failed recall threshold ${scenario.cohorts ? 0.5 : 0.65}`,
         );
         for (const unrelated of scenario.unrelated)
           assert(
@@ -438,6 +445,20 @@ for (const runnerName of ["vitest", "bun"] as const)
           probability(unrelated) <= 0.4,
           `${unrelated}: independent test scored above 0.4`,
         );
+      if (scenario.cohorts) {
+        assert(
+          ranking.length === 100 && report.decisions.length === 4,
+          "100 files must be scored across four complete batches",
+        );
+        assert(
+          scenario.cohorts[0]!.files.every((file) => probability(file) >= 0.8),
+          "Direct affected tests must rank high",
+        );
+        assert(
+          scenario.cohorts[9]!.files.every((file) => probability(file) <= 0.2),
+          "Unrelated long tail must rank low",
+        );
+      }
       for (const decision of report.decisions)
         captured[decision.requestHash] = {
           model: decision.model,

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
+import { moduleContext } from "./module-context.ts";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 
 export async function evidence(ctx: HookContext, files: string[]) {
@@ -62,7 +63,12 @@ export async function evidence(ctx: HookContext, files: string[]) {
         excerpt: readFileSync(file, "utf8").slice(0, 1200),
       };
     });
+  const modules = moduleContext(root, [
+    ...candidates.map((candidate) => path.join(root, candidate.file)),
+    ...changed.map((file) => path.join(root, file)),
+  ]);
   return {
+    modules,
     baseSha,
     mergeBase,
     changed,

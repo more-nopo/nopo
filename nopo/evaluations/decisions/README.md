@@ -10,7 +10,7 @@ NOPO_DECISION_EVAL_MODE=live bun nopo/evaluations/decisions/run.ts
 
 Supply `OPENROUTER_API_KEY` through the environment. CI reads the repository secret of that name. Missing credentials fail the quality job; there is no mock fallback. Only synthetic fixture source is transmitted by this evaluation.
 
-The nine scenarios exercise Noul, Choice and Score and run four controlled changes through both native runners. Each fixture first passes without the change. The evaluation then checks actual failing tests against expected failures, confirms every test still executes, and assesses relevance:
+The eleven scenarios exercise Noul, Choice and Score and run four controlled changes through both native runners. Each fixture first passes without the change. The evaluation then checks actual failing tests against expected failures, confirms every test still executes, and assesses relevance:
 
 - Tax regression: the affected checkout test must score at least 0.65 and outrank unrelated login and tax-label tests. The label is a deliberate keyword decoy.
 - Shared dependency regression: both dependent tests must score at least 0.65; an independent authentication test must score at most 0.4.
@@ -38,3 +38,12 @@ bun nopo/evaluations/decisions/run.ts
 Both the main `ci` job (mock integration) and `decision-quality` job (recorded live answers by default) print a table for each scenario. The same tables appear in the Actions job summary and `summary.md` artifact. Each row shows the returned relevance score, the fixture's expected relationship to the change, and whether that test actually failed after the mutation. A scenario passes only when native execution and score quality gates both hold; expected mutation failures are successful evaluation evidence.
 
 The output names the mode and model, lists changed files, shows scoring and native execution time, and illustrates which files a threshold of 0.65 would select and how many observed failures that would miss. This is a counterfactual count, not filtering or a measured speedup. Replay timing measures replay overhead, not API latency. Native runner logs also print individual scores when observation is enabled. Full JSON and native logs remain available in `decision-evaluation` (quality) and `mock-decision-evaluation` (integration) artifacts.
+
+
+## 100-test dependency gradient
+
+Both runners now execute the same 100-file fixture, with a mutation in the middle `money` module. Ten interleaved cohorts cover direct assertions, immediate wrappers, deep wrappers, mixed aggregation, enabled/bypassed conditional paths, overlapping invariant assertions, unchanged exports, keyword decoys, and unrelated authentication. Fifty tests are known to fail under the mutation; fifty still pass. The baseline runs all 100 before mutation, and observation runs all 100 afterward.
+
+Each scoring request contains the complete candidate set, diff, nopo target graph, and a bounded advisory file graph with imported module excerpts. Four batches ask for 32/32/32/4 scores without hiding the other candidates. Relative imports and re-exports are followed to eight levels; alias/package/unresolved edges and truncation remain explicit. This is not a native resolver or a claim of complete static analysis.
+
+Mock answers span 0.99 to 0.01 to verify graded plumbing and multi-batch completeness; those values are never used as model-quality evidence. Live/replay summaries show every score, cohort min/median/max, ten-bin histogram, and top-K mutation recall at K=10/25/50/75/100. No cohort labels or expected scores are sent to the API. Correctness gates require all files scored, actual mutation ground truth preserved, affected files scoring at least 0.5, direct files at least 0.8, and unrelated files at most 0.2. Distance is not itself a lower relevance label: a deep wrapper asserting the changed numeric value can be just as relevant as a direct test. The observed distribution shows whether Jev actually gives useful gradation rather than fabricating one.

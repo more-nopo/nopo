@@ -30,7 +30,8 @@ export function relevanceRequest(input: Evidence, start = 0): DecisionRequest {
       diff: input.diff,
       diffTruncated: input.diffTruncated,
       graph: input.graph,
-      candidates,
+      modules: input.modules,
+      candidates: input.candidates,
     },
     questions: Object.fromEntries(
       candidates.map((candidate) => [
@@ -58,7 +59,7 @@ export async function rankTests(input: Evidence, decisions: DecisionClient) {
   const responses: Extract<DecisionResult, { status: "ok" }>[] = [];
   for (
     let start = 0;
-    start < Math.min(input.candidates.length, 128);
+    start < input.candidates.length;
     start += 32
   ) {
     const result = await decisions.evaluate(relevanceRequest(input, start));
@@ -126,6 +127,12 @@ export async function observeTestRun<T extends { exitCode: number }>(
     phaseStart = performance.now();
     const input = await evidence(ctx, inventory.files);
     timings.contextMs = performance.now() - phaseStart;
+    report.moduleContext = {
+      authority: input.modules.authority,
+      truncated: input.modules.truncated,
+      count: input.modules.modules.length,
+      scopeLimit: input.modules.scopeLimit,
+    };
     report.baseSha = input.baseSha;
     report.changedFiles = input.changed;
     report.fingerprint = input.fingerprint;
