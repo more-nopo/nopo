@@ -13,7 +13,7 @@
   "dependencies": {
     "@more-nopo/nopo": "^0.3.0",
     "zod": "^3.24.2",
-    "@more-nopo/nopo-test-relevance": "workspace:^"
+    "@more-nopo/nopo-test-relevance": "^0.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.16.0",

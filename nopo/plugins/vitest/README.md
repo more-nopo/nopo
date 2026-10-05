@@ -237,3 +237,8 @@ nopo test ui -- --relevance=off
 ```
 
 For direct plugin commands, place these flags after the native `--` separator too. A threshold alone does not activate relevance. Missing/invalid scores, unavailable credentials/API, failed discovery, or truncated evidence retain full native execution. Vitest quarantine audits always run their complete required scope. Bun's inventory remains advisory, with unsupported discovery arguments falling back to the full suite. Reports and logs identify the actual execution decision; dry reporting never skips files.
+
+CI can set `NOPO_RELEVANCE_MODE=dry` and `NOPO_RELEVANCE_THRESHOLD=0.7`
+to enable reports only in that job. These variables affect the Vitest/Bun test
+plugins; other command runners receive no extra arguments. Environment settings
+override configuration; explicit relevance CLI flags override the environment.

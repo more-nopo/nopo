@@ -115,6 +115,7 @@ async function run(
   argv = ["test", "demo"],
   enabled: boolean | { mode: "dry" | "select"; threshold: number } = true,
   scores: Record<string, number> = {},
+  extraEnv: Record<string, string> = {},
 ) {
   configure(root, (config) => {
     const name = config.commands.test.plugin;
@@ -189,6 +190,7 @@ async function run(
 
       NOPO_RELEVANCE_REPORT_DIR: enabled ? path.join(root, "reports") : "",
       OPENROUTER_API_KEY: "",
+      ...extraEnv,
     },
   });
   return { ...r, output: r.stdout + r.stderr };
@@ -565,3 +567,34 @@ it("Vitest threshold selection cannot skip a mandatory quarantined audit", async
     readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8").trim(),
   ).toBe("three");
 });
+
+for (const runner of ["vitest", "bun"] as const) {
+  it(`${runner}: job environment enables dry scoring without native flags`, async () => {
+    const root = fixture(runner);
+    const result = await run(
+      root,
+      "mock",
+      ["test", "demo"],
+      false,
+      {},
+      {
+        NOPO_RELEVANCE_MODE: "dry",
+        NOPO_RELEVANCE_THRESHOLD: ".7",
+        NOPO_RELEVANCE_REPORT_DIR: path.join(root, "reports"),
+      },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(reports(root)[0]).toMatchObject({
+      mode: "dry",
+      threshold: 0.7,
+      candidateCount: 3,
+      skippedFiles: 0,
+    });
+    expect(
+      readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+        .trim()
+        .split("\n")
+        .sort(),
+    ).toEqual(["one", "three", "two"]);
+  });
+}

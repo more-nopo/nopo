@@ -72,7 +72,7 @@ export async function runBunTest(
   env: Record<string, string | undefined>,
   options: TestOptions,
 ): Promise<void> {
-  const parsed = relevanceArgs(argv, options.relevance);
+  const parsed = relevanceArgs(argv, options.relevance, context.io.env);
   const args = selectTestArgs(parsed.args, options, cwd);
   const execute = (extra: { stdio: "pipe" | "inherit"; nothrow?: boolean }) =>
     observeTestRun(

@@ -18,7 +18,11 @@ export function relevanceOptions(value?: RelevanceOptions) {
     ? value
     : { mode: value ?? "off", threshold: 0.65 };
 }
-export function relevanceArgs(argv: string[], configured?: RelevanceOptions) {
+export function relevanceArgs(
+  argv: string[],
+  configured?: RelevanceOptions,
+  env: Record<string, string | undefined> = {},
+) {
   const args: string[] = [];
   let mode: string | undefined, threshold: number | undefined;
   for (let i = 0; i < argv.length; i++) {
@@ -39,6 +43,26 @@ export function relevanceArgs(argv: string[], configured?: RelevanceOptions) {
         throw new Error("Duplicate --relevance-threshold");
       threshold = Number(raw);
     }
+  }
+  const configuredBase = relevanceOptions(configured);
+  const environmentMode = env.NOPO_RELEVANCE_MODE;
+  const environmentThreshold = env.NOPO_RELEVANCE_THRESHOLD;
+  if (environmentMode || environmentThreshold) {
+    const selectedMode = environmentMode ?? configuredBase.mode;
+    if (selectedMode === "off" && environmentThreshold)
+      throw new Error(
+        "NOPO_RELEVANCE_THRESHOLD requires an enabled relevance mode",
+      );
+    configured = relevanceSchema.parse(
+      selectedMode === "off"
+        ? "off"
+        : {
+            mode: selectedMode === "observe" ? "dry" : selectedMode,
+            threshold: environmentThreshold
+              ? Number(environmentThreshold)
+              : configuredBase.threshold,
+          },
+    );
   }
   const base = relevanceOptions(configured);
   if (threshold !== undefined && (mode ?? base.mode) === "off")
