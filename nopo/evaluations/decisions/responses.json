@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "responses": {
+    "4962cc07b6b344034107f8c53577380ff8a1128f414accd88a63fc6127798f31": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "paid": {
+          "type": "noul",
+          "noul": 0.99
+        },
+        "currency": {
+          "type": "choice",
+          "choice": "USD",
+          "probabilities": {
+            "EUR": 0,
+            "USD": 1
+          },
+          "confidence": 1
+        },
+        "amount": {
+          "type": "score",
+          "score": 1,
+          "probabilities": {
+            "0": 0,
+            "1": 1,
+            "2": 0
+          },
+          "confidence": 1,
+          "legend": {
+            "0": "Zero amount",
+            "1": "Between one and ninety-nine",
+            "2": "One hundred or greater"
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 384,
+        "output_tokens": 61,
+        "cost": 0.000016128
+      }
+    },
+    "b044e2d7b305b4c03c85afb33d09163176f9a6c0806afea04a36a7695f215318": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b852b9267b2f5e14ed5b": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.95
+        }
+      },
+      "usage": {
+        "input_tokens": 1607,
+        "output_tokens": 103,
+        "cost": 0.000067494
+      }
+    },
+    "dc739a2443318cce78b308bc81fe8eb0405626821c8b706551d55753abf07172": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.97
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.05
+        }
+      },
+      "usage": {
+        "input_tokens": 1631,
+        "output_tokens": 103,
+        "cost": 0.000068502
+      }
+    },
+    "44b5b0397872ca464b567f4873562f0b1ac53ed2093df3dbcb1c3a70f10041e7": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "989b755b41daad12f6d7": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "bb9daf25b2de189856db": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "7a4a29ed4e86d227cb60": {
+          "type": "noul",
+          "noul": 0.96
+        }
+      },
+      "usage": {
+        "input_tokens": 1659,
+        "output_tokens": 100,
+        "cost": 0.000069678
+      }
+    },
+    "510b38fe7e0b0ecef18b971be59d320fb26e6fbdcfdd8f1e7b5a1632ebfc613c": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.02
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.03
+        }
+      },
+      "usage": {
+        "input_tokens": 1604,
+        "output_tokens": 103,
+        "cost": 0.000067368
+      }
+    },
+    "d67698eee33eacee9f49f227191846ef94522990e7259a19c9cba347f14430e4": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b852b9267b2f5e14ed5b": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.94
+        }
+      },
+      "usage": {
+        "input_tokens": 1607,
+        "output_tokens": 103,
+        "cost": 0.000067494
+      }
+    },
+    "41cc574989084b4f9acf0c12a217d0b67a94644f18a36e1985952132abaecb6a": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.97
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.04
+        }
+      },
+      "usage": {
+        "input_tokens": 1631,
+        "output_tokens": 103,
+        "cost": 0.000068502
+      }
+    },
+    "221e9b14213b3085e75c6d7dbef3e0ff9db2135fb834befe1cce555885f5b644": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "bb9daf25b2de189856db": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "7a4a29ed4e86d227cb60": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "989b755b41daad12f6d7": {
+          "type": "noul",
+          "noul": 0.94
+        }
+      },
+      "usage": {
+        "input_tokens": 1659,
+        "output_tokens": 100,
+        "cost": 0.000069678
+      }
+    },
+    "d8dfbb9fd796f6d9947c155c55cbf0e86612acb03d4c049f723547f8da634f61": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.02
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.03
+        }
+      },
+      "usage": {
+        "input_tokens": 1604,
+        "output_tokens": 103,
+        "cost": 0.000067368
+      }
+    }
+  }
+}

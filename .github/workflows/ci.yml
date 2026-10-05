@@ -66,7 +66,7 @@ jobs:
         run: bun nopo/evaluations/decisions/run.ts
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          NOPO_DECISION_EVAL_MODE: ${{ inputs.decision-mode || vars.NOPO_DECISION_EVAL_MODE || 'live' }}
+          NOPO_DECISION_EVAL_MODE: ${{ inputs.decision-mode || vars.NOPO_DECISION_EVAL_MODE || 'replay' }}
           NOPO_DECISION_REPLAY_FILE: nopo/evaluations/decisions/responses.json
           NOPO_DECISION_EVAL_DIR: ${{ runner.temp }}/decision-evaluation
       - uses: actions/upload-artifact@v4
