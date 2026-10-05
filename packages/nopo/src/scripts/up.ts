@@ -64,7 +64,7 @@ export interface UpPhaseContext {
    * {@link HookContext}. The CLI driver builds this via
    * `runner.contextIO()`; tests pass a minimal stub.
    */
-  contextIO: Pick<HookContext, "io" | "exec" | "shell">;
+  contextIO: Pick<HookContext, "io" | "exec" | "shell" | "decisions">;
 }
 
 /** The CLI driver produces a single `HookContext` per `up` invocation today; the extracted

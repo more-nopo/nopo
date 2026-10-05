@@ -12,9 +12,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
+import {
+  observeTestRun,
+  relevanceSchema,
+  relevanceArgs,
+  vitestSelectionArgs,
+} from "@more-nopo/nopo-test-relevance";
+import { vitestCandidates } from "./discovery.ts";
 
 export const policySchema = z
   .object({
+    relevance: relevanceSchema.optional(),
     quarantine: z.string().min(1).optional(),
     sharding: z.enum(["native", "clamp"]).optional(),
   })
@@ -145,6 +153,9 @@ export async function runWithPolicy(
   config: string | undefined,
   policy: TestPolicy,
 ) {
+  const parsed = relevanceArgs(argv, policy.relevance);
+  argv = parsed.args;
+  policy = { ...policy, relevance: parsed.relevance };
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-policy-"));
   try {
     const native = nativeConfig(argv, root, config);
@@ -160,23 +171,35 @@ export async function runWithPolicy(
       configFile = gateConfig,
       capture = false,
       nothrow = false,
-    ) =>
-      context.exec(
-        "node",
-        [
-          binary,
-          mode,
-          ...(configFile ? ["--config", configFile] : []),
-          ...args,
-        ],
+      mandatory = false,
+    ) => {
+      const argv = [
+        binary,
+        mode,
+        ...(configFile ? ["--config", configFile] : []),
+        ...args,
+      ];
+      const options = {
+        cwd: root,
+        env,
+        stdio: capture ? ("pipe" as const) : ("inherit" as const),
+        silent: capture,
+        nothrow,
+      };
+      if (mode === "list") return context.exec("node", argv, options);
+      return observeTestRun(
+        context,
         {
+          runner: "vitest",
           cwd: root,
-          env,
-          stdio: capture ? "pipe" : "inherit",
-          silent: capture,
-          nothrow,
+          relevance: policy.relevance,
+          mandatory,
         },
+        () => vitestCandidates(context, "node", argv, { cwd: root, env }),
+        (selection) =>
+          context.exec("node", vitestSelectionArgs(argv, selection), options),
       );
+    };
     const list = async (args: string[], configFile = gateConfig) => {
       const report = path.join(temporary, "inventory.json");
       rmSync(report, { force: true });
@@ -231,6 +254,7 @@ export async function runWithPolicy(
       [...shard.args, "--reporter=json", `--outputFile=${output}`],
       auditConfig,
       false,
+      true,
       true,
     );
     const report = z

@@ -1,3 +1,4 @@
+import { createDecisionClient } from "../decisions/index.ts";
 import { describe, expect, it } from "vitest";
 
 import type { NormalizedProjectConfig } from "../config/index.ts";
@@ -77,6 +78,7 @@ function stubRunner(overrides: StubRunnerOverrides = {}): StubRunner {
     },
     contextIO() {
       return {
+        decisions: createDecisionClient(undefined),
         io,
         // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exec is never invoked from the status path
         exec: (() => {

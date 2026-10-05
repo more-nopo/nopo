@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { decisionConfigSchema, type DecisionConfig } from "../decisions/index.ts";
 
 import type {
   LoadedPlugin,
@@ -512,6 +513,7 @@ const ProjectPackageManagerSchema = z.object({
 
 const ProjectConfigSchema = z.object({
   name: z.string().min(1),
+  decisions: decisionConfigSchema.optional(),
   os: ProjectOsSchema.default({
     base: "node:22.16.0-slim",
   }),
@@ -861,6 +863,7 @@ interface NormalizedServicesConfig {
 }
 
 export interface NormalizedProjectConfig {
+  decisions?: DecisionConfig;
   name: string;
   configPath: string;
   os: NormalizedOsConfig;
@@ -920,6 +923,7 @@ export function loadProjectConfig(
 
   const project: NormalizedProjectConfig = {
     name: parsed.name,
+    decisions: parsed.decisions,
     configPath: resolvedConfigPath,
     os: normalizeOs(parsed.os),
     services,

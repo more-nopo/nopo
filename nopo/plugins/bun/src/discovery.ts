@@ -1,0 +1,111 @@
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
+export interface Inventory {
+  files: string[];
+  authority: "native" | "advisory";
+  scopeLimit: string;
+}
+
+// Consume the runner's resolved argv: profiles and --files have already expanded.
+// Fail closed on unfamiliar option syntax instead of inventing an exact inventory.
+export function bunTestArguments(argv: string[]) {
+  const options: string[] = [];
+  const filters: string[] = [];
+  const valued = new Set([
+    "--timeout",
+    "--preload",
+    "--test-name-pattern",
+    "-t",
+    "--rerun-each",
+    "--seed",
+    "--reporter",
+    "--reporter-outfile",
+    "--bail",
+    "--max-concurrency",
+  ]);
+  const flags = new Set([
+    "--coverage",
+    "--only",
+    "--todo",
+    "--randomize",
+    "--concurrent",
+    "--silent",
+    "--update-snapshots",
+    "-u",
+    "--pass-with-no-tests",
+  ]);
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    const name = arg.split("=")[0]!;
+    if (valued.has(name)) {
+      options.push(arg);
+      if (!arg.includes("=")) {
+        if (!argv[i + 1] || argv[i + 1]!.startsWith("-"))
+          throw new Error("ambiguous-bun-option");
+        options.push(argv[++i]!);
+      }
+    } else if (flags.has(arg)) {
+      options.push(arg);
+      continue;
+    } else if (arg.startsWith("-"))
+      throw new Error("unsupported-bun-discovery-option");
+    else filters.push(arg);
+  }
+  return { filters, options };
+}
+export function bunCandidates(cwd: string, argv: string[]): Inventory {
+  const { filters } = bunTestArguments(argv);
+  const configFile = path.join(cwd, "bunfig.toml");
+  const config = existsSync(configFile)
+    ? (
+        globalThis as unknown as {
+          Bun: { TOML: { parse(text: string): { test?: { root?: string } } } };
+        }
+      ).Bun.TOML.parse(readFileSync(configFile, "utf8"))
+    : {};
+  const root = path.resolve(cwd, config.test?.root ?? ".");
+  const files = new Set<string>();
+  function visit(dir: string) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (
+        entry.name.startsWith(".") ||
+        entry.name === "node_modules" ||
+        entry.isSymbolicLink()
+      )
+        continue;
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (/(?:\.|_)(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(entry.name))
+        files.add(file);
+    }
+  }
+  visit(root);
+  const explicit = filters.filter(
+    (filter) => filter.startsWith("./") || path.isAbsolute(filter),
+  );
+  for (const filter of explicit) {
+    const file = path.resolve(cwd, filter);
+    if (statSync(file).isDirectory()) visit(file);
+    else files.add(file);
+  }
+  return {
+    files: [...files].filter(
+      (file) =>
+        !filters.length ||
+        filters.some((filter) => {
+          if (!explicit.includes(filter))
+            return path.relative(cwd, file).includes(filter);
+          const relative = path.relative(path.resolve(cwd, filter), file);
+          return (
+            relative === "" ||
+            (!relative.startsWith(`..${path.sep}`) &&
+              !path.isAbsolute(relative))
+          );
+        }),
+    ),
+    authority: "advisory",
+    scopeLimit:
+      "Bun pattern inventory with resolved path filters; not native discovery. Test-name filters, custom loaders and inherited configuration may differ.",
+  };
+}

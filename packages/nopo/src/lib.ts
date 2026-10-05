@@ -5,6 +5,12 @@ import path from "node:path";
 import process from "node:process";
 import { z } from "zod";
 
+import {
+  createDecisionClient,
+  type DecisionClient,
+} from "./decisions/index.ts";
+import { secrets } from "./secrets/index.ts";
+
 import { trackChild } from "./child-registry.ts";
 import { assertCommandDispatches } from "./commands/index.ts";
 import {
@@ -936,6 +942,26 @@ export abstract class LegacyScript<TArgs = void> extends BaseScript {
 }
 
 export class Runner {
+  private decisionClient?: DecisionClient;
+
+  get decisions(): DecisionClient {
+    return (this.decisionClient ??= createDecisionClient(
+      this.config.project.decisions,
+      {
+        env: {
+          ...this.io.env,
+          ...this.environment.env,
+          ...this.environment.extraEnv,
+        },
+        root: this.config.root,
+        secret: (reference) =>
+          secrets.get(reference.target, reference.runtime, reference.key, {
+            project: this.config.project,
+            env: this.io.env,
+          }),
+      },
+    ));
+  }
   config: Config;
   environment: import("./parse-env.ts").Environment;
   logger: Logger;
@@ -978,11 +1004,13 @@ export class Runner {
    * from `nopo/lib` inside a plugin again.
    */
   contextIO(): {
+    decisions: DecisionClient;
     io: IO;
     exec: ReturnType<typeof makeCtxExec>;
     shell: ReturnType<typeof makeCtxShell>;
   } {
     return {
+      decisions: this.decisions,
       io: this.io,
       exec: makeCtxExec(this.io),
       shell: makeCtxShell(this.io),

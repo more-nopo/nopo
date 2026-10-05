@@ -18,7 +18,8 @@
     "./plugin": "./src/plugin.ts",
     "./script-args": "./src/script-args.ts",
     "./secrets": "./src/secrets/index.ts",
-    "./svc-env": "./src/svc-env.ts"
+    "./svc-env": "./src/svc-env.ts",
+    "./decisions": "./src/decisions/index.ts"
   },
   "scripts": {
     "test": "vitest run"

@@ -3,6 +3,12 @@ name: ci
 on:
   pull_request:
   merge_group:
+  workflow_dispatch:
+    inputs:
+      decision-mode:
+        type: choice
+        default: live
+        options: [live, mock, replay]
 
 jobs:
   ci:
@@ -18,6 +24,18 @@ jobs:
       - run: bun run --cwd nopo/plugins/vitest check
       - run: bun run --cwd nopo/plugins/bun test
       - run: bun run --cwd nopo/plugins/vitest test
+      - run: nopo/plugins/vitest/node_modules/.bin/tsc --project nopo/evaluations/decisions/tsconfig.json
+      - run: nopo/plugins/vitest/node_modules/.bin/vitest run --config nopo/evaluations/decisions/vitest.config.ts
+      - run: bun nopo/evaluations/decisions/run.ts
+        env:
+          NOPO_DECISION_EVAL_MODE: mock
+          NOPO_DECISION_EVAL_DIR: ${{ runner.temp }}/mock-decision-evaluation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-decision-evaluation
+          path: ${{ runner.temp }}/mock-decision-evaluation
+          if-no-files-found: warn
 
   platforms:
     if: github.event_name == 'merge_group'
@@ -34,3 +52,33 @@ jobs:
       - run: nopo test
       - run: bun run --cwd nopo/plugins/bun test
       - run: bun run --cwd nopo/plugins/vitest test
+      - run: nopo/plugins/vitest/node_modules/.bin/tsc --project nopo/evaluations/decisions/tsconfig.json
+      - run: nopo/plugins/vitest/node_modules/.bin/vitest run --config nopo/evaluations/decisions/vitest.config.ts
+      - run: bun nopo/evaluations/decisions/run.ts
+        env:
+          NOPO_DECISION_EVAL_MODE: mock
+
+  decision-quality:
+    # Repository secrets are never exposed to fork pull requests.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.1"
+      - run: bun install --frozen-lockfile
+      - name: Evaluate relevance against native mutation failures
+        run: bun nopo/evaluations/decisions/run.ts
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          NOPO_DECISION_EVAL_MODE: ${{ inputs.decision-mode || vars.NOPO_DECISION_EVAL_MODE || 'replay' }}
+          NOPO_DECISION_REPLAY_FILE: nopo/evaluations/decisions/responses.json
+          NOPO_DECISION_EVAL_DIR: ${{ runner.temp }}/decision-evaluation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: decision-evaluation
+          path: ${{ runner.temp }}/decision-evaluation
+          if-no-files-found: warn

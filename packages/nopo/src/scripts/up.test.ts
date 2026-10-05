@@ -1,3 +1,4 @@
+import { createDecisionClient } from "../decisions/index.ts";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DependencyGraph } from "../graph.ts";
@@ -58,7 +59,7 @@ function stubGraph(): DependencyGraph {
   return { __stub: "graph" } as unknown as DependencyGraph;
 }
 
-function stubContextIO(): Pick<HookContext, "io" | "exec" | "shell"> {
+function stubContextIO(): Pick<HookContext, "io" | "exec" | "shell" | "decisions"> {
   const io = mockIO({ argv: ["nopo"], cwd: "/" });
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exec/shell are sentinels — handlers only forward them
   const exec = (() => {
@@ -68,7 +69,7 @@ function stubContextIO(): Pick<HookContext, "io" | "exec" | "shell"> {
   const shell = (() => {
     throw new Error("shell stub: not invoked in these tests");
   }) as unknown as HookContext["shell"];
-  return { io, exec, shell };
+  return { io, exec, shell, decisions: createDecisionClient(undefined) };
 }
 
 function makePhaseCtx(

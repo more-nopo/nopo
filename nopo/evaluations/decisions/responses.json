@@ -1,0 +1,1099 @@
+{
+  "schemaVersion": 1,
+  "responses": {
+    "4962cc07b6b344034107f8c53577380ff8a1128f414accd88a63fc6127798f31": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "currency": {
+          "type": "choice",
+          "choice": "USD",
+          "probabilities": {
+            "USD": 1,
+            "EUR": 0
+          },
+          "confidence": 1
+        },
+        "amount": {
+          "type": "score",
+          "score": 1,
+          "probabilities": {
+            "0": 0,
+            "1": 1,
+            "2": 0
+          },
+          "confidence": 1,
+          "legend": {
+            "0": "Zero amount",
+            "1": "Between one and ninety-nine",
+            "2": "One hundred or greater"
+          }
+        },
+        "paid": {
+          "type": "noul",
+          "noul": 0.99
+        }
+      },
+      "usage": {
+        "input_tokens": 384,
+        "output_tokens": 61,
+        "cost": 0.000016128
+      }
+    },
+    "d6e39e211c9b170b341ce27a86faa03d5367066a4812a730650fa551d6a489bc": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b852b9267b2f5e14ed5b": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.94
+        }
+      },
+      "usage": {
+        "input_tokens": 1875,
+        "output_tokens": 103,
+        "cost": 0.00007875
+      }
+    },
+    "15310d355b67a610a2afe5076267d9d6a6845ce4fcaf4c89c92c830490375bb7": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.97
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.04
+        }
+      },
+      "usage": {
+        "input_tokens": 1884,
+        "output_tokens": 103,
+        "cost": 0.000079128
+      }
+    },
+    "602f20bec141d10df31926a6be247a515958d109c050cd7c38031b4d6ece0623": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "bb9daf25b2de189856db": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "7a4a29ed4e86d227cb60": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "989b755b41daad12f6d7": {
+          "type": "noul",
+          "noul": 0.93
+        }
+      },
+      "usage": {
+        "input_tokens": 1919,
+        "output_tokens": 100,
+        "cost": 0.000080598
+      }
+    },
+    "a844b3960fd87ff80a5d702ffbb738d7f5d087229a47623a515838c1b955f222": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.03
+        }
+      },
+      "usage": {
+        "input_tokens": 1910,
+        "output_tokens": 103,
+        "cost": 0.00008022
+      }
+    },
+    "410d7faf5d8667cfca6d2258540889a0d09d3eddc6dc9a4d089fe42f4a6a1397": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "52a3f2769feda23c97d2": {
+          "type": "noul",
+          "noul": 0.96
+        },
+        "820b0e444b4bc860d44a": {
+          "type": "noul",
+          "noul": 0.96
+        },
+        "f99991e434077ed12f2a": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "7f58ed14f036783c34d0": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "f09f9a9fcd5af7113673": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "c1809623ebb96beb8a82": {
+          "type": "noul",
+          "noul": 0.15
+        },
+        "2ce02ccd346671904318": {
+          "type": "noul",
+          "noul": 0.72
+        },
+        "c5ce2e2339cc0ae8b948": {
+          "type": "noul",
+          "noul": 0.17
+        },
+        "98bb75694ac0771de4a8": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "e2abdf4282c33f4b4f94": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "80d90a3066c767c4aa90": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "29bfdfc8463566b1e92c": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b49fd181bbb369bc4221": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "6fd4297f00ca15da6c68": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "ab93ae21182381949d8e": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "b1a668c7c6de12d8d59d": {
+          "type": "noul",
+          "noul": 0.12
+        },
+        "805c04e2c35f58d24204": {
+          "type": "noul",
+          "noul": 0.71
+        },
+        "bb4eeb69ddb8fd58ca54": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "b0a88c709b718d24b5e8": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "9a17bd1583f24cb2ef8e": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "7d0267ab834789e45cbc": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "fd979c6fb51abe4f2159": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "e9d7f8b060547cbad2f2": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "8737494f0c3fe91de76c": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "7c114003039f27903ae1": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "741f95d6a5380c35760c": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "354248bb4d1ebaaf10ae": {
+          "type": "noul",
+          "noul": 0.72
+        },
+        "e0ba4fcf12f9c91015f5": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "d65c96732ac0069e768a": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "5745df0bc38e707f5baa": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "82b4bb4af9ae5d067fbc": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "a1e6b45496691bc73f57": {
+          "type": "noul",
+          "noul": 0.95
+        }
+      },
+      "usage": {
+        "input_tokens": 31585,
+        "output_tokens": 1051,
+        "cost": 0.00132657
+      }
+    },
+    "caa40d2c2b68ab469c65aaa09c3b412ae0b2d6f57ec5d4d51ff43e679d402106": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "3e28dceadfbbb9baed8d": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "2b7f50c6ee800be9723c": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "156a0836b870b6b4c03c": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "8c0453a8171675550058": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "d44da03fedb59416d545": {
+          "type": "noul",
+          "noul": 0.76
+        },
+        "06af0d422cfe79c7c416": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "659beedc044cba1af482": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "2b6143ce7ad25f55b5a9": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "78cf5a9384ff3f232d56": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "1afa066c79cfd970b226": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "6a74be4be62663b141e5": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "5612094d721108a609fa": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "25c2890792efb2c474c7": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "e8fa467e47c3e749e21b": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "4f06ccb8fb24a905196f": {
+          "type": "noul",
+          "noul": 0.77
+        },
+        "3621abb3281e6205bc8c": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "a6ea7f093e5823b06964": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "4ddcd62c0f736e679c7d": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "2ae5364682f68fbd8a53": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b4577676a7558512f26b": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "a21927c6f0d927e95f2f": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "27ba2ead3474ce28825f": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "3c596e0e65082358b3e2": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "c5dffa1f6fb4a886d686": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "3fcc28d0ae436315c8b7": {
+          "type": "noul",
+          "noul": 0.77
+        },
+        "cf59dfea471a4427ec35": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "1a4d143e17bd620708e7": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "b92f03b1725116430a8f": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "7d250eb6979ecd876bd4": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "7dd85594c6abb86bc09b": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "40bcafc164d75dcce9cc": {
+          "type": "noul",
+          "noul": 0.89
+        },
+        "f8c9de45ae7fc7083f68": {
+          "type": "noul",
+          "noul": 0.86
+        }
+      },
+      "usage": {
+        "input_tokens": 31587,
+        "output_tokens": 1053,
+        "cost": 0.001326654
+      }
+    },
+    "a51165dfbd9faf40c8a1dfb9fc4f5cfa5853b891d83ba18c8d7b6433f1c413c7": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "c2524a8fb2551cbbe346": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "482b3b59255492bd7ecd": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "82b3f352d9d718386680": {
+          "type": "noul",
+          "noul": 0.71
+        },
+        "8570632f6619d3bbea1c": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "bc7c490a4f438d9497fb": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "74597ce76986f71c50d5": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "83fe53852525c152474d": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "cbb13ed7888a78f5b59a": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "f1edaad0f553cfc9d1b6": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "44d66158ad52b38c2002": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "27738a8b42e9dc6f21b1": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "cd90fba999a20624a581": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "8955ce33d1bd1de34613": {
+          "type": "noul",
+          "noul": 0.76
+        },
+        "995ff451af295fbe1283": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "00cee3337e074f7e0cd6": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "ff89554505e9b604ef51": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d7c4714d16ae2d316617": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "cb53a47a8509a252ca25": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "6f401a9474d87c87bed6": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "617f9ec2ade3de5d3342": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "90972bc2b86c4c9bd3c1": {
+          "type": "noul",
+          "noul": 0.89
+        },
+        "ab0296dbb5d4e67f6dad": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "570eafd18f35cbfb1382": {
+          "type": "noul",
+          "noul": 0.69
+        },
+        "806cda4730eff9d0d70c": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "defbb03707d8b3a3ba46": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "40c36ce5af2bbdb879ad": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "b8b3874bfeb5da65d513": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "ddc3d0f19dc7f8b14caa": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "89267f4da3a85303032b": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "d8433c2306f23f5419de": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "0515f2cd0d35467a64a5": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "779ab3b531b00a49ec02": {
+          "type": "noul",
+          "noul": 0.14
+        }
+      },
+      "usage": {
+        "input_tokens": 31586,
+        "output_tokens": 1049,
+        "cost": 0.001326612
+      }
+    },
+    "a287c271a95fc2686e44869929949a89c5003339ada2db884f80e716418f2f92": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "68919eadf72ae5d3b25f": {
+          "type": "noul",
+          "noul": 0.75
+        },
+        "fe5456caf5031c0b6796": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "e16075b1ce8c7f73e3f9": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "6b1920ff87d462566dce": {
+          "type": "noul",
+          "noul": 0.04
+        }
+      },
+      "usage": {
+        "input_tokens": 24520,
+        "output_tokens": 135,
+        "cost": 0.00102984
+      }
+    },
+    "a6397f571612dfd469348995cb5c694be3b1ef3cc6618d300bee68ebf3576a27": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b852b9267b2f5e14ed5b": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.95
+        }
+      },
+      "usage": {
+        "input_tokens": 1875,
+        "output_tokens": 103,
+        "cost": 0.00007875
+      }
+    },
+    "d7bcd36a736d38b1f192f38025bcfbddecb96e2b1d8f072ae542a594a7739781": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.97
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.04
+        }
+      },
+      "usage": {
+        "input_tokens": 1884,
+        "output_tokens": 103,
+        "cost": 0.000079128
+      }
+    },
+    "a3dc3dfe30f8c76ff4e23e31aae0e37d02d524dcd2d3dc800f9b2c1feaf30bc7": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "bb9daf25b2de189856db": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "7a4a29ed4e86d227cb60": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "989b755b41daad12f6d7": {
+          "type": "noul",
+          "noul": 0.94
+        }
+      },
+      "usage": {
+        "input_tokens": 1919,
+        "output_tokens": 100,
+        "cost": 0.000080598
+      }
+    },
+    "5f1761bd3237f480fd6a8c3f47deeafc091bc531b4e02e24923a7a6a2da36abd": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "91b95d31020cee6d0120": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "ea70d84ba52898cc5202": {
+          "type": "noul",
+          "noul": 0.02
+        },
+        "017981c17ddc74c8c527": {
+          "type": "noul",
+          "noul": 0.03
+        }
+      },
+      "usage": {
+        "input_tokens": 1910,
+        "output_tokens": 103,
+        "cost": 0.00008022
+      }
+    },
+    "f8712614534060075481e3faf5188b16a6b294fef91937d5bb3fa234a2238c21": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "52a3f2769feda23c97d2": {
+          "type": "noul",
+          "noul": 0.96
+        },
+        "820b0e444b4bc860d44a": {
+          "type": "noul",
+          "noul": 0.96
+        },
+        "f99991e434077ed12f2a": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "7f58ed14f036783c34d0": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "f09f9a9fcd5af7113673": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "c1809623ebb96beb8a82": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "2ce02ccd346671904318": {
+          "type": "noul",
+          "noul": 0.65
+        },
+        "c5ce2e2339cc0ae8b948": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "98bb75694ac0771de4a8": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "e2abdf4282c33f4b4f94": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "80d90a3066c767c4aa90": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "29bfdfc8463566b1e92c": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b49fd181bbb369bc4221": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "6fd4297f00ca15da6c68": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "ab93ae21182381949d8e": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "b1a668c7c6de12d8d59d": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "805c04e2c35f58d24204": {
+          "type": "noul",
+          "noul": 0.68
+        },
+        "bb4eeb69ddb8fd58ca54": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "b0a88c709b718d24b5e8": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "9a17bd1583f24cb2ef8e": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "7d0267ab834789e45cbc": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "fd979c6fb51abe4f2159": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "e9d7f8b060547cbad2f2": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "8737494f0c3fe91de76c": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "7c114003039f27903ae1": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "741f95d6a5380c35760c": {
+          "type": "noul",
+          "noul": 0.14
+        },
+        "354248bb4d1ebaaf10ae": {
+          "type": "noul",
+          "noul": 0.71
+        },
+        "e0ba4fcf12f9c91015f5": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "d65c96732ac0069e768a": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "5745df0bc38e707f5baa": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "82b4bb4af9ae5d067fbc": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "a1e6b45496691bc73f57": {
+          "type": "noul",
+          "noul": 0.95
+        }
+      },
+      "usage": {
+        "input_tokens": 31585,
+        "output_tokens": 1051,
+        "cost": 0.00132657
+      }
+    },
+    "d512d6855ac42bf3d4a2fa52afe2a8cec7eefe8ede67c34669f4500e7b90113c": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "3e28dceadfbbb9baed8d": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "2b7f50c6ee800be9723c": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "156a0836b870b6b4c03c": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "8c0453a8171675550058": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "d44da03fedb59416d545": {
+          "type": "noul",
+          "noul": 0.73
+        },
+        "06af0d422cfe79c7c416": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "659beedc044cba1af482": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "2b6143ce7ad25f55b5a9": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "78cf5a9384ff3f232d56": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "1afa066c79cfd970b226": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "6a74be4be62663b141e5": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "5612094d721108a609fa": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "25c2890792efb2c474c7": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "e8fa467e47c3e749e21b": {
+          "type": "noul",
+          "noul": 0.15
+        },
+        "4f06ccb8fb24a905196f": {
+          "type": "noul",
+          "noul": 0.67
+        },
+        "3621abb3281e6205bc8c": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "a6ea7f093e5823b06964": {
+          "type": "noul",
+          "noul": 0.12
+        },
+        "4ddcd62c0f736e679c7d": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "2ae5364682f68fbd8a53": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "b4577676a7558512f26b": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "a21927c6f0d927e95f2f": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "27ba2ead3474ce28825f": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "3c596e0e65082358b3e2": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "c5dffa1f6fb4a886d686": {
+          "type": "noul",
+          "noul": 0.12
+        },
+        "3fcc28d0ae436315c8b7": {
+          "type": "noul",
+          "noul": 0.71
+        },
+        "cf59dfea471a4427ec35": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "1a4d143e17bd620708e7": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "b92f03b1725116430a8f": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "7d250eb6979ecd876bd4": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "7dd85594c6abb86bc09b": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "40bcafc164d75dcce9cc": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "f8c9de45ae7fc7083f68": {
+          "type": "noul",
+          "noul": 0.86
+        }
+      },
+      "usage": {
+        "input_tokens": 31587,
+        "output_tokens": 1053,
+        "cost": 0.001326654
+      }
+    },
+    "5b2b4dba3658f15c5bb7bde97ac1e18f8cfdc3b9aafe314579b8d2e622171214": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "c2524a8fb2551cbbe346": {
+          "type": "noul",
+          "noul": 0.89
+        },
+        "482b3b59255492bd7ecd": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "82b3f352d9d718386680": {
+          "type": "noul",
+          "noul": 0.68
+        },
+        "8570632f6619d3bbea1c": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "bc7c490a4f438d9497fb": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "74597ce76986f71c50d5": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "83fe53852525c152474d": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "cbb13ed7888a78f5b59a": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "f1edaad0f553cfc9d1b6": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "44d66158ad52b38c2002": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "27738a8b42e9dc6f21b1": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "cd90fba999a20624a581": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "8955ce33d1bd1de34613": {
+          "type": "noul",
+          "noul": 0.7
+        },
+        "995ff451af295fbe1283": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "00cee3337e074f7e0cd6": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "ff89554505e9b604ef51": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d7c4714d16ae2d316617": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "cb53a47a8509a252ca25": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "6f401a9474d87c87bed6": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "617f9ec2ade3de5d3342": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "90972bc2b86c4c9bd3c1": {
+          "type": "noul",
+          "noul": 0.88
+        },
+        "ab0296dbb5d4e67f6dad": {
+          "type": "noul",
+          "noul": 0.12
+        },
+        "570eafd18f35cbfb1382": {
+          "type": "noul",
+          "noul": 0.7
+        },
+        "806cda4730eff9d0d70c": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "defbb03707d8b3a3ba46": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "40c36ce5af2bbdb879ad": {
+          "type": "noul",
+          "noul": 0.03
+        },
+        "b8b3874bfeb5da65d513": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "ddc3d0f19dc7f8b14caa": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "89267f4da3a85303032b": {
+          "type": "noul",
+          "noul": 0.92
+        },
+        "d8433c2306f23f5419de": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "0515f2cd0d35467a64a5": {
+          "type": "noul",
+          "noul": 0.93
+        },
+        "779ab3b531b00a49ec02": {
+          "type": "noul",
+          "noul": 0.12
+        }
+      },
+      "usage": {
+        "input_tokens": 31586,
+        "output_tokens": 1049,
+        "cost": 0.001326612
+      }
+    },
+    "1ce52e012744555f22195cead7bc9b70fe821c98940a318f1931e3aae461d2c8": {
+      "model": "typesafe/jev-1.13-20260917",
+      "answers": {
+        "68919eadf72ae5d3b25f": {
+          "type": "noul",
+          "noul": 0.75
+        },
+        "fe5456caf5031c0b6796": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "e16075b1ce8c7f73e3f9": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "6b1920ff87d462566dce": {
+          "type": "noul",
+          "noul": 0.04
+        }
+      },
+      "usage": {
+        "input_tokens": 24520,
+        "output_tokens": 135,
+        "cost": 0.00102984
+      }
+    }
+  }
+}
