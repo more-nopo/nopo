@@ -174,7 +174,7 @@ Native project reference: https://vitest.dev/guide/projects
 
 This version provides native discovery and execution. It makes no Jev calls and
 runs the full selected scope unless the caller supplies Vitest filters. This is
-the runner boundary where relevance-based selection can later be integrated.
+the runner boundary where opt-in relevance selection is applied.
 
 ## Test execution policy
 
@@ -213,3 +213,27 @@ Pass `--quarantine=off` after `--` to diagnose a quarantined test without the ga
 ## Decision observation
 
 Set `test.relevance: observe` in the plugin policy and configure root `decisions` to rank the resolved test scope through the shared core decision service. Execution retains every test and native exit behavior. See [decision configuration](../../docs/decisions.md) and the [behavioral evaluation](../../evaluations/decisions/README.md).
+
+
+## Relevance modes and thresholds
+
+Relevance is off unless enabled in configuration or CLI arguments. Configuring the core `decisions` provider alone does not score tests. `observe` remains an alias for dry reporting.
+
+```yaml
+plugins:
+  vitest: # use bun for Bun
+    test:
+      relevance:
+        mode: dry # run everything and report the proposed selection
+        threshold: 0.7
+```
+
+Use `mode: select` to apply the threshold. Scores equal to the threshold are included; it must be between 0 and 1 and defaults to 0.65. Reports include every score, `wouldInclude`, `wouldExclude`, actual skipped count, threshold, mode, and native result. An empty selection succeeds without running test files. The command's original native scope, file filters, profiles and options still apply.
+
+```sh
+nopo test ui -- --relevance=dry --relevance-threshold=0.7
+nopo test ui -- --relevance=select --relevance-threshold=0.7
+nopo test ui -- --relevance=off
+```
+
+For direct plugin commands, place these flags after the native `--` separator too. A threshold alone does not activate relevance. Missing/invalid scores, unavailable credentials/API, failed discovery, or truncated evidence retain full native execution. Vitest quarantine audits always run their complete required scope. Bun's inventory remains advisory, with unsupported discovery arguments falling back to the full suite. Reports and logs identify the actual execution decision; dry reporting never skips files.

@@ -62,6 +62,13 @@ async function handle(request) {
       new URL("./dist/node.js", pathToFileURL(request.binary)).href
     );
     const parsed = api.parseCLI(["vitest", ...request.args]);
+    // Match native CLI normalization: --exclude appends, never replaces config excludes.
+    if (parsed.options.exclude) {
+      parsed.options.cliExclude = Array.isArray(parsed.options.exclude)
+        ? parsed.options.exclude
+        : [parsed.options.exclude];
+      delete parsed.options.exclude;
+    }
     const requestedWorkers = parsed.options.maxWorkers;
     if (
       requestedWorkers !== undefined &&
@@ -181,11 +188,14 @@ async function handle(request) {
     process.send?.({ id: request.id, exitCode });
   } catch (error) {
     process.exitCode = 0;
+    const empty =
+      error?.code === "VITEST_FILES_NOT_FOUND" &&
+      instance?.config.passWithNoTests;
     await close().catch(() => {});
     process.send?.({
       id: request.id,
-      exitCode: 1,
-      error: describeError(error),
+      exitCode: empty ? 0 : 1,
+      ...(empty ? {} : { error: describeError(error) }),
     });
   } finally {
     activeId = undefined;

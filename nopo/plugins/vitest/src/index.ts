@@ -1,3 +1,4 @@
+import { configureSession, runVitestProcess } from "./session.ts";
 import {
   existsSync,
   mkdtempSync,
@@ -18,8 +19,13 @@ import {
 } from "@more-nopo/nopo/plugin";
 import { ScriptArgs } from "@more-nopo/nopo/script-args";
 import { z } from "zod";
-import { configureSession, runVitestProcess } from "./session.ts";
-import { observeTestRun } from "@more-nopo/nopo-test-relevance";
+import {
+  observeTestRun,
+  relevanceArgs,
+  relevanceOptions,
+  vitestSelectionArgs,
+  type RelevanceOptions,
+} from "@more-nopo/nopo-test-relevance";
 import { vitestCandidates } from "./discovery.ts";
 import { policySchema, runWithPolicy, type TestPolicy } from "./test-policy.ts";
 
@@ -205,26 +211,32 @@ async function spawnVitest(
   args: string[],
   cwd: string,
   env: Record<string, string>,
-  relevance?: "off" | "observe",
+  relevance?: RelevanceOptions,
   relevanceRoots?: string[],
 ): Promise<void> {
   // Through nopo IO: argv boundaries, streamed output, and tracked subprocesses.
-  const argv = [binary, ...args];
+  const parsed = relevanceArgs(args, relevance);
+  const scopedRoots = args.some(
+    (arg) => arg === "--relevance" || arg.startsWith("--relevance="),
+  )
+    ? undefined
+    : relevanceRoots;
+  const argv = [binary, ...parsed.args];
   await observeTestRun(
     context,
     {
       runner: "vitest",
       cwd,
-      relevance: args[0] === "run" ? relevance : undefined,
+      relevance: args[0] === "run" ? parsed.relevance : undefined,
     },
     async () => {
       const inventory = await vitestCandidates(context, "node", argv, {
         cwd,
         env,
       });
-      if (relevanceRoots)
+      if (scopedRoots)
         inventory.files = inventory.files.filter((file) =>
-          relevanceRoots.some((root) => {
+          scopedRoots.some((root) => {
             const relative = path.relative(root, file);
             return (
               relative !== ".." &&
@@ -235,7 +247,12 @@ async function spawnVitest(
         );
       return inventory;
     },
-    () => runVitestProcess(context, argv, { cwd, env, stdio: "inherit" }),
+    (selection) =>
+      runVitestProcess(context, vitestSelectionArgs(argv, selection), {
+        cwd,
+        env,
+        stdio: "inherit",
+      }),
   );
 }
 
@@ -378,6 +395,22 @@ export async function executeVitest(
     throw new Error(
       "[vitest] Test policies currently require a single target. Use delegated target commands for policy-aware runs.",
     );
+  const enabled = targets.filter(
+    (target) => relevanceOptions(target.test?.relevance).mode !== "off",
+  );
+  if (
+    !passthrough.some(
+      (arg) => arg === "--relevance" || arg.startsWith("--relevance="),
+    ) &&
+    new Set(
+      enabled.map((target) =>
+        JSON.stringify(relevanceOptions(target.test?.relevance)),
+      ),
+    ).size > 1
+  )
+    throw new Error(
+      "[vitest] A shared run requires matching relevance mode and threshold across opted-in targets.",
+    );
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-"));
   try {
     const configFile = path.join(temporary, "vitest.config.mjs");
@@ -392,12 +425,8 @@ export async function executeVitest(
       [mode, "--config", configFile, ...project.args, ...passthrough],
       context.runner.config.root,
       { ...baseEnv, ...env },
-      targets.some((target) => target.test?.relevance === "observe")
-        ? "observe"
-        : undefined,
-      targets
-        .filter((target) => target.test?.relevance === "observe")
-        .map((target) => target.root),
+      enabled[0]?.test?.relevance,
+      enabled.length ? enabled.map((target) => target.root) : undefined,
     );
   } finally {
     rmSync(temporary, { recursive: true, force: true });

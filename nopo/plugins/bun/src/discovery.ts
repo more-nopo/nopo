@@ -9,7 +9,8 @@ export interface Inventory {
 
 // Consume the runner's resolved argv: profiles and --files have already expanded.
 // Fail closed on unfamiliar option syntax instead of inventing an exact inventory.
-export function bunCandidates(cwd: string, argv: string[]): Inventory {
+export function bunTestArguments(argv: string[]) {
+  const options: string[] = [];
   const filters: string[] = [];
   const valued = new Set([
     "--timeout",
@@ -38,16 +39,23 @@ export function bunCandidates(cwd: string, argv: string[]): Inventory {
     const arg = argv[i]!;
     const name = arg.split("=")[0]!;
     if (valued.has(name)) {
+      options.push(arg);
       if (!arg.includes("=")) {
         if (!argv[i + 1] || argv[i + 1]!.startsWith("-"))
           throw new Error("ambiguous-bun-option");
-        i++;
+        options.push(argv[++i]!);
       }
-    } else if (flags.has(arg)) continue;
-    else if (arg.startsWith("-"))
+    } else if (flags.has(arg)) {
+      options.push(arg);
+      continue;
+    } else if (arg.startsWith("-"))
       throw new Error("unsupported-bun-discovery-option");
     else filters.push(arg);
   }
+  return { filters, options };
+}
+export function bunCandidates(cwd: string, argv: string[]): Inventory {
+  const { filters } = bunTestArguments(argv);
   const configFile = path.join(cwd, "bunfig.toml");
   const config = existsSync(configFile)
     ? (

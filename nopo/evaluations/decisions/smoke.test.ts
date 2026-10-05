@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
+  renameSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -111,14 +113,16 @@ async function run(
   root: string,
   provider = "mock",
   argv = ["test", "demo"],
-  enabled = true,
+  enabled: boolean | { mode: "dry" | "select"; threshold: number } = true,
+  scores: Record<string, number> = {},
 ) {
   configure(root, (config) => {
     const name = config.commands.test.plugin;
     config.plugins ??= {};
     config.plugins[name] ??= {};
     config.plugins[name].test ??= {};
-    config.plugins[name].test.relevance = enabled ? "observe" : "off";
+    config.plugins[name].test.relevance =
+      enabled === true ? "observe" : enabled === false ? "off" : enabled;
   });
   const projectFile = path.join(root, "nopo.yml");
   const project = JSON.parse(readFileSync(projectFile, "utf8"));
@@ -146,9 +150,11 @@ async function run(
     const responses: Record<string, unknown> = {};
     // Cover every native subset (profiles, argv filters, gate and audit) with exact replay identities.
     for (let mask = 1; mask < 8; mask++) {
-      const files = ["one", "two", "three"]
+      const files = readdirSync(path.join(root, "apps/demo"))
+        .filter((name) => name.endsWith(".test.ts"))
+        .sort()
         .filter((_, i) => mask & (1 << i))
-        .map((name) => path.join(root, `apps/demo/${name}.test.ts`));
+        .map((name) => path.join(root, `apps/demo/${name}`));
       const input = await evidence(
         { runner, io: realIO } as HookContext,
         files,
@@ -158,7 +164,10 @@ async function run(
         answers: Object.fromEntries(
           input.candidates.map((candidate) => [
             candidate.id,
-            { type: "noul", noul: 0.5 },
+            {
+              type: "noul",
+              noul: scores[path.basename(candidate.file)] ?? 0.5,
+            },
           ]),
         ),
       };
@@ -403,4 +412,156 @@ it("disabled observation produces no report and retains execution", async () => 
   const result = await run(root, "mock", ["test", "demo"], false);
   expect(result.status, result.output).toBe(0);
   expect(readdirSync(root)).not.toContain("reports");
+});
+
+for (const runner of ["vitest", "bun"] as const) {
+  it(`${runner}: dry reports threshold selection while executing all tests`, async () => {
+    const root = fixture(runner);
+    const result = await run(
+      root,
+      "mock",
+      ["test", "demo"],
+      { mode: "dry", threshold: 0.65 },
+      { "one.test.ts": 0.9, "two.test.ts": 0.65, "three.test.ts": 0.1 },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(
+      readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+        .trim()
+        .split("\n")
+        .sort(),
+    ).toEqual(["one", "three", "two"]);
+    const report = JSON.parse(
+      readFileSync(
+        path.join(root, "reports", readdirSync(path.join(root, "reports"))[0]!),
+        "utf8",
+      ),
+    );
+    expect(report).toMatchObject({
+      mode: "dry",
+      threshold: 0.65,
+      skippedFiles: 0,
+      execution: "unchanged",
+    });
+    expect(report.wouldInclude).toHaveLength(2);
+    expect(report.wouldExclude).toHaveLength(1);
+  });
+  it(`${runner}: selection honors threshold equality and strips broad file filters`, async () => {
+    const root = fixture(runner);
+    const result = await run(
+      root,
+      "mock",
+      ["test", "demo", "--", ".test.ts"],
+      { mode: "select", threshold: 0.65 },
+      { "one.test.ts": 0.9, "two.test.ts": 0.65, "three.test.ts": 0.1 },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(
+      readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+        .trim()
+        .split("\n")
+        .sort(),
+    ).toEqual(["one", "two"]);
+  });
+  it(`${runner}: CLI dry override runs all tests and empty selection is a successful no-op`, async () => {
+    const root = fixture(runner);
+    let result = await run(
+      root,
+      "mock",
+      ["test", "demo", "--", "--relevance=dry", "--relevance-threshold=1"],
+      { mode: "select", threshold: 0.65 },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(
+      readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+        .trim()
+        .split("\n"),
+    ).toHaveLength(3);
+    rmSync(path.join(root, "apps/demo/ran.txt"));
+    result = await run(root, "mock", [
+      "test",
+      "demo",
+      "--",
+      "--relevance=select",
+      "--relevance-threshold=1",
+    ]);
+    expect(result.status, result.output).toBe(0);
+    expect(existsSync(path.join(root, "apps/demo/ran.txt"))).toBe(false);
+  });
+  it(`${runner}: unavailable selection preserves full execution and native failures`, async () => {
+    const root = fixture(runner);
+    writeFileSync(
+      path.join(root, "apps/demo/one.test.ts"),
+      `import {test,expect} from '${runner === "bun" ? "bun:test" : "vitest"}'; test('fails',()=>expect(true).toBe(false));`,
+    );
+    const result = await run(root, "credentials", ["test", "demo"], {
+      mode: "select",
+      threshold: 1,
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(
+      readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+        .trim()
+        .split("\n")
+        .sort(),
+    ).toEqual(["three", "two"]);
+    expect(result.output).toContain("full suite retained");
+  });
+}
+it("Vitest selection excludes metacharacter paths exactly", async () => {
+  const root = fixture("vitest");
+  renameSync(
+    path.join(root, "apps/demo/three.test.ts"),
+    path.join(root, "apps/demo/three[dev].test.ts"),
+  );
+  const result = await run(
+    root,
+    "mock",
+    ["test", "demo"],
+    { mode: "select", threshold: 0.65 },
+    { "one.test.ts": 0.9, "two.test.ts": 0.9, "three[dev].test.ts": 0.1 },
+  );
+  expect(result.status, result.output).toBe(0);
+  expect(
+    readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
+      .trim()
+      .split("\n")
+      .sort(),
+  ).toEqual(["one", "two"]);
+});
+
+it("Vitest threshold selection cannot skip a mandatory quarantined audit", async () => {
+  const root = fixture("vitest");
+  const file = path.join(root, "apps/demo/three.test.ts");
+  writeFileSync(
+    file,
+    readFileSync(file, "utf8").replace(
+      "expect(1).toBe(1)",
+      "expect(1).toBe(2)",
+    ),
+  );
+  writeFileSync(
+    path.join(root, "apps/demo/quarantine.json"),
+    JSON.stringify({ files: { "three.test.ts": "known failure" } }),
+  );
+  configure(root, (config) => {
+    config.plugins = { vitest: { test: { quarantine: "quarantine.json" } } };
+  });
+  const result = await run(root, "mock", ["test", "demo"], {
+    mode: "select",
+    threshold: 1,
+  });
+  expect(result.status, result.output).toBe(0);
+  expect(result.output).toContain("still fail as expected");
+  const audit = reports(root).find(
+    (report) => report.fallback === "mandatory-audit",
+  );
+  expect(audit).toMatchObject({
+    execution: "unchanged",
+    skippedFiles: 0,
+    exitCode: 1,
+  });
+  expect(
+    readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8").trim(),
+  ).toBe("three");
 });

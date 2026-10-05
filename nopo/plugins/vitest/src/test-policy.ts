@@ -1,3 +1,4 @@
+import { runVitestProcess } from "./session.ts";
 import {
   existsSync,
   mkdtempSync,
@@ -12,13 +13,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
-import { observeTestRun } from "@more-nopo/nopo-test-relevance";
-import { runVitestProcess } from "./session.ts";
+import {
+  observeTestRun,
+  relevanceSchema,
+  relevanceArgs,
+  vitestSelectionArgs,
+} from "@more-nopo/nopo-test-relevance";
 import { vitestCandidates } from "./discovery.ts";
 
 export const policySchema = z
   .object({
-    relevance: z.enum(["off", "observe"]).optional(),
+    relevance: relevanceSchema.optional(),
     quarantine: z.string().min(1).optional(),
     sharding: z.enum(["native", "clamp"]).optional(),
   })
@@ -149,6 +154,9 @@ export async function runWithPolicy(
   config: string | undefined,
   policy: TestPolicy,
 ) {
+  const parsed = relevanceArgs(argv, policy.relevance);
+  argv = parsed.args;
+  policy = { ...policy, relevance: parsed.relevance };
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-policy-"));
   try {
     const native = nativeConfig(argv, root, config);
@@ -164,6 +172,7 @@ export async function runWithPolicy(
       configFile = gateConfig,
       capture = false,
       nothrow = false,
+      mandatory = false,
     ) => {
       const argv = [
         binary,
@@ -181,9 +190,19 @@ export async function runWithPolicy(
       if (mode === "list") return runVitestProcess(context, argv, options);
       return observeTestRun(
         context,
-        { runner: "vitest", cwd: root, relevance: policy.relevance },
+        {
+          runner: "vitest",
+          cwd: root,
+          relevance: policy.relevance,
+          mandatory,
+        },
         () => vitestCandidates(context, "node", argv, { cwd: root, env }),
-        () => runVitestProcess(context, argv, options),
+        (selection) =>
+          runVitestProcess(
+            context,
+            vitestSelectionArgs(argv, selection),
+            options,
+          ),
       );
     };
     const list = async (args: string[], configFile = gateConfig) => {
@@ -240,6 +259,7 @@ export async function runWithPolicy(
       [...shard.args, "--reporter=json", `--outputFile=${output}`],
       auditConfig,
       false,
+      true,
       true,
     );
     const report = z

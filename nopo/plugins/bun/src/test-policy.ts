@@ -2,8 +2,13 @@ import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
-import { observeTestRun } from "@more-nopo/nopo-test-relevance";
-import { bunCandidates } from "./discovery.ts";
+import {
+  observeTestRun,
+  relevanceSchema,
+  relevanceArgs,
+  vitestSelectionArgs,
+} from "@more-nopo/nopo-test-relevance";
+import { bunCandidates, bunTestArguments } from "./discovery.ts";
 
 export const profileSchema = z
   .object({
@@ -13,7 +18,7 @@ export const profileSchema = z
   .strict();
 export const testSchema = z
   .object({
-    relevance: z.enum(["off", "observe"]).optional(),
+    relevance: relevanceSchema.optional(),
     profiles: z.record(profileSchema).optional(),
     shutdown: z.enum(["strict", "after-success"]).optional(),
   })
@@ -67,13 +72,26 @@ export async function runBunTest(
   env: Record<string, string | undefined>,
   options: TestOptions,
 ): Promise<void> {
-  const args = selectTestArgs(argv, options, cwd);
+  const parsed = relevanceArgs(argv, options.relevance);
+  const args = selectTestArgs(parsed.args, options, cwd);
   const execute = (extra: { stdio: "pipe" | "inherit"; nothrow?: boolean }) =>
     observeTestRun(
       context,
-      { runner: "bun", cwd, relevance: options.relevance },
+      { runner: "bun", cwd, relevance: parsed.relevance },
       async () => bunCandidates(cwd, args),
-      () => context.exec("bun", ["test", ...args], { cwd, env, ...extra }),
+      (selection) =>
+        selection && !selection.included.length
+          ? Promise.resolve({ exitCode: 0, stdout: "", stderr: "" })
+          : context.exec(
+              "bun",
+              [
+                "test",
+                ...(selection
+                  ? [...bunTestArguments(args).options, ...selection.included]
+                  : args),
+              ],
+              { cwd, env, ...extra },
+            ),
     );
   if (options.shutdown !== "after-success") {
     await execute({ stdio: "inherit" });
