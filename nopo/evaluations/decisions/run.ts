@@ -2,6 +2,7 @@
  * actually fail under controlled mutations; mock mode only verifies integration. */
 import { spawn, spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -30,6 +31,12 @@ import { evidence } from "../../plugins/test-relevance/src/evidence.ts";
 import { relevanceRequest } from "../../plugins/test-relevance/src/index.ts";
 import type { HookContext } from "../../../packages/nopo/src/plugin.ts";
 import { scenarios } from "./cases.ts";
+import {
+  evaluationHeader,
+  evaluationSummary,
+  scenarioReport,
+  type EvaluationResult,
+} from "./report.ts";
 
 const repository = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -49,7 +56,8 @@ mkdirSync(output, { recursive: true });
 const model = "jev-1.13";
 const baseUrl = "https://openrouter.ai/api";
 const captured: Record<string, unknown> = {};
-const results: unknown[] = [];
+const results: EvaluationResult[] = [];
+console.log(evaluationHeader(mode));
 let failures = 0;
 function write(root: string, file: string, content: string) {
   mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
@@ -205,6 +213,7 @@ for (const runnerName of ["vitest", "bun"] as const)
       mkdtempSync(path.join(tmpdir(), "nopo-decision-eval-")),
     );
     const label = `${runnerName}-${scenario.name}`;
+    let observation: Partial<EvaluationResult> = {};
     try {
       const pluginPath = path.join(
         repository,
@@ -389,15 +398,30 @@ for (const runnerName of ["vitest", "bun"] as const)
       const report = JSON.parse(
         readFileSync(path.join(root, "reports", files[0]!), "utf8"),
       );
+      const ranking: { file: string; probability: number | null }[] =
+        report.ranking ?? [];
+      observation = {
+        ranking,
+        changedFiles: report.changedFiles,
+        knownFailures: scenario.expectedFailures,
+        observedFailures: outcomes
+          .filter((row) => row.failed)
+          .map((row) => row.file),
+        relevant: scenario.relevant,
+        unrelated: scenario.unrelated,
+        timings: report.timings,
+        elapsedMs: performance.now() - started,
+        decisions: report.decisions,
+      };
       assert(
         report.status === "ranked" &&
           report.unscored === 0 &&
           report.skippedFiles === 0,
         `Ranking unavailable: ${JSON.stringify(report)}`,
       );
-      const ranking: { file: string; probability: number }[] = report.ranking;
       const probability = (file: string) =>
-        ranking.find((row) => path.basename(row.file) === file)!.probability;
+        ranking.find((row) => path.basename(row.file) === file)?.probability ??
+        -1;
       for (const relevant of scenario.relevant) {
         assert(
           probability(relevant) >= 0.65,
@@ -420,21 +444,17 @@ for (const runnerName of ["vitest", "bun"] as const)
           answers: decision.answers,
           usage: decision.usage,
         };
-      results.push({
-        scenario: label,
-        passed: true,
-        knownFailures: scenario.expectedFailures,
-        relevant: scenario.relevant,
-        unrelated: scenario.unrelated,
-        ranking,
-        timings: report.timings,
-        elapsedMs: performance.now() - started,
-        decisions: report.decisions,
-      });
+      results.push({ ...observation, scenario: label, passed: true });
     } catch (error) {
       failures++;
-      results.push({ scenario: label, passed: false, error: String(error) });
+      results.push({
+        ...observation,
+        scenario: label,
+        passed: false,
+        error: String(error),
+      });
     } finally {
+      console.log(scenarioReport(results[results.length - 1]!));
       rmSync(root, { recursive: true, force: true });
     }
   }
@@ -446,6 +466,11 @@ writeFileSync(
   path.join(output, "results.json"),
   JSON.stringify({ mode, model, failures, results }, null, 2),
 );
+const summary = evaluationSummary(mode, results);
+writeFileSync(path.join(output, "summary.md"), summary);
+if (process.env.GITHUB_STEP_SUMMARY)
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+console.log(scenarioReport(results[0]!));
 console.log(
   JSON.stringify({
     mode,

@@ -127,6 +127,7 @@ export async function observeTestRun<T extends { exitCode: number }>(
     const input = await evidence(ctx, inventory.files);
     timings.contextMs = performance.now() - phaseStart;
     report.baseSha = input.baseSha;
+    report.changedFiles = input.changed;
     report.fingerprint = input.fingerprint;
     report.diffTruncated = input.diffTruncated;
     report.candidateCount = input.candidates.length;
@@ -171,6 +172,17 @@ export async function observeTestRun<T extends { exitCode: number }>(
         file,
         JSON.stringify({ ...report, timings }, null, 2) + "\n",
         { mode: 0o600 },
+      );
+      const rows = (report.ranking ?? []) as RankedTest[];
+      ctx.io.stderr.write(
+        `[relevance] ${options.runner} ${JSON.stringify(report.target)}: ${report.candidateCount ?? 0} candidates; ${report.unscored ?? rows.length} unscored; scoring ${Math.round(timings.scoringMs ?? 0)}ms; model ${JSON.stringify(report.models ?? [])}; source ${JSON.stringify([...new Set(((report.decisions ?? []) as { source: string }[]).map((item) => item.source))])}\n`,
+      );
+      for (const row of rows)
+        ctx.io.stderr.write(
+          `[relevance] ${row.probability === null ? "unscored" : row.probability.toFixed(3)} ${JSON.stringify(row.file)}\n`,
+        );
+      ctx.io.stderr.write(
+        "[relevance] Scores estimate relevance, not calibrated failure risk; observe mode skips 0 files.\n",
       );
       ctx.io.stderr.write(
         `[relevance] ${report.status}; full suite retained; report: ${file}\n`,

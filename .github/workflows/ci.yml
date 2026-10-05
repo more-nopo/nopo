@@ -29,6 +29,13 @@ jobs:
       - run: bun nopo/evaluations/decisions/run.ts
         env:
           NOPO_DECISION_EVAL_MODE: mock
+          NOPO_DECISION_EVAL_DIR: ${{ runner.temp }}/mock-decision-evaluation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-decision-evaluation
+          path: ${{ runner.temp }}/mock-decision-evaluation
+          if-no-files-found: warn
 
   platforms:
     if: github.event_name == 'merge_group'

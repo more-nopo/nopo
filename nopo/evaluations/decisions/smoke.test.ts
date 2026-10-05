@@ -190,6 +190,8 @@ describe("ranking inside runner plugins", async () => {
       const root = fixture(runner);
       const result = await run(root);
       expect(result.status, result.output).toBe(0);
+      expect(result.output).toMatch(/\[relevance\] 0\.\d{3} .*test/);
+      expect(result.output).toContain("observe mode skips 0 files");
       expect(
         readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
           .trim()
