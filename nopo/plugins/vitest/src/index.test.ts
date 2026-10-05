@@ -274,6 +274,7 @@ describe("execution", () => {
       const source = readFileSync(argv[3], "utf8");
       expect(source).toContain('"TARGET":"a"');
       expect(source).toContain('"TARGET":"b"');
+      return { exitCode: 0, stdout: "", stderr: "" };
     });
     await run(ctx);
     expect(exec).toHaveBeenCalledTimes(1);

@@ -84,9 +84,31 @@ plugins:
       FEATURE_MODE: test
 ```
 
-Each delegated command is its own DAG node and Vitest invocation. To share one
-Vitest run across targets, invoke `nopo vitest run web ui` directly. Core does not
-coalesce independently configured commands or combine their environments.
+Each delegated command remains its own DAG node with its own result. By default,
+all Vitest tasks in one nopo invocation share a Node coordinator and a worker
+limit of two per native Vitest pool. Ready tasks queue through that coordinator; each native run still
+parallelizes its files within that limit. Configured lower worker limits remain
+lower. Matching configurations reuse the native instance; changing working
+directory, environment, installation or options closes it before creating another.
+Target coverage, environments, failures and dependency ordering remain scoped to
+their commands. This reduces process fan-out at the cost of running target requests in sequence.
+A native run mixing pool types (such as forks and threads) can use both pools;
+`workers` is a limit per pool, not a total OS-process count.
+
+Configure the invocation budget, or opt into independent native processes:
+
+```yaml
+plugins:
+  - name: vitest
+    config:
+      workers: 2
+      execution: shared # default; isolated restores separate invocations
+```
+
+Interactive watch/UI invocations use native processes. A crashed shared coordinator
+fails its active task, kills its workers, and restarts for queued independent tasks.
+The coordinator closes when nopo finishes, including failed runs. Direct
+`nopo vitest run web ui` still combines targets into one native project run.
 
 An explicitly requested unknown, disabled, or unconfigured target is an error.
 Direct `--print` emits the resolved target/config mapping without loading configs

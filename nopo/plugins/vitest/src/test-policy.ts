@@ -1,3 +1,4 @@
+import { runVitestProcess } from "./session.ts";
 import {
   existsSync,
   mkdtempSync,
@@ -186,7 +187,7 @@ export async function runWithPolicy(
         silent: capture,
         nothrow,
       };
-      if (mode === "list") return context.exec("node", argv, options);
+      if (mode === "list") return runVitestProcess(context, argv, options);
       return observeTestRun(
         context,
         {
@@ -197,7 +198,11 @@ export async function runWithPolicy(
         },
         () => vitestCandidates(context, "node", argv, { cwd: root, env }),
         (selection) =>
-          context.exec("node", vitestSelectionArgs(argv, selection), options),
+          runVitestProcess(
+            context,
+            vitestSelectionArgs(argv, selection),
+            options,
+          ),
       );
     };
     const list = async (args: string[], configFile = gateConfig) => {

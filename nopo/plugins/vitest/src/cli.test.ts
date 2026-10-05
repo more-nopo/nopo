@@ -481,3 +481,237 @@ describe("runner-owned test policies", async () => {
     expect(r.output).toContain("Quarantine audit runs on shard 1 only");
   });
 });
+
+function editTarget(
+  root: string,
+  target: string,
+  change: (config: any) => void,
+) {
+  const file = path.join(root, "apps", target, "nopo.yml");
+  const config = JSON.parse(readFileSync(file, "utf8"));
+  change(config);
+  writeFileSync(file, JSON.stringify(config));
+}
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+describe("shared DAG coordinator", () => {
+  it("runs parallel target tasks through one coordinator, preserves environments and cleans it up", async () => {
+    const root = fixture();
+    const result = await nopo(root, "test", "alpha", "beta", "--concurrency=4");
+    expect(result.code, result.output).toBe(0);
+    const rows = records(root);
+    expect(rows).toHaveLength(4);
+    expect(new Set(rows.map((row) => row.parent)).size).toBe(1);
+    expect(new Set(rows.map((row) => row.target))).toEqual(
+      new Set(["alpha", "beta"]),
+    );
+    expect(alive(rows[0]!.parent)).toBe(false);
+  });
+  it("keeps failure scoped to a command and runs an independent ready command", async () => {
+    const root = fixture();
+    const file = path.join(root, "apps/alpha/one.test.js");
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace(
+        'expect(message).toBe("alpha")',
+        "expect(message).toBe('broken')",
+      ),
+    );
+    editTarget(root, "alpha", (config) => {
+      config.commands.after = {
+        command: "touch should-not-run",
+        deps: ["test"],
+      };
+    });
+    const result = await nopo(
+      root,
+      "test",
+      "alpha",
+      "beta",
+      "--no-fail-fast",
+      "--concurrency=4",
+    );
+    expect(result.code, result.output).toBe(1);
+    expect(records(root).filter((row) => row.target === "beta")).toHaveLength(
+      2,
+    );
+    expect(new Set(records(root).map((row) => row.parent)).size).toBe(1);
+    expect(alive(records(root)[0]!.parent)).toBe(false);
+    // A downstream task is still governed by the DAG failure, not the coordinator's global state.
+    const after = await nopo(root, "after", "alpha");
+    expect(after.code, after.output).toBe(1);
+    expect(existsSync(path.join(root, "apps/alpha/should-not-run"))).toBe(
+      false,
+    );
+  });
+  it("retains dependency ordering across target tasks in the same coordinator", async () => {
+    const root = fixture();
+    editTarget(root, "beta", (config) => {
+      config.commands.test.dependencies = { alpha: ["test"] };
+    });
+    const result = await nopo(root, "test", "beta");
+    expect(result.code, result.output).toBe(0);
+    expect(records(root).map((row) => row.target)).toEqual([
+      "alpha",
+      "alpha",
+      "beta",
+      "beta",
+    ]);
+    expect(new Set(records(root).map((row) => row.parent)).size).toBe(1);
+  });
+  it.each([1, 8])(
+    "caps native maxWorkers=%s across the whole DAG",
+    async (nativeWorkers) => {
+      const root = fixture();
+      const file = path.join(root, "events.jsonl");
+      for (const name of ["alpha", "beta"]) {
+        writeFileSync(
+          path.join(root, "apps", name, "vitest.config.mjs"),
+          `export default {test:{include:['*.test.js'],pool:'forks',fileParallelism:true,maxWorkers:${nativeWorkers}}};`,
+        );
+        for (const suffix of ["one", "two", "three", "four"])
+          writeFileSync(
+            path.join(root, "apps", name, `${suffix}.test.js`),
+            `import {test,expect} from 'vitest';import {appendFileSync} from 'node:fs';test('${name}-${suffix}',async()=>{const event=phase=>appendFileSync(${JSON.stringify(file)},JSON.stringify({phase,worker:process.pid,coordinator:process.ppid,target:'${name}'})+'\\n');event('start');await new Promise(r=>setTimeout(r,80));expect(process.env.PROJECT_ENV).toBe('${name}');event('end');});`,
+          );
+      }
+      const result = await nopo(
+        root,
+        "test",
+        "alpha",
+        "beta",
+        "--concurrency=8",
+        "--",
+      );
+      expect(result.code, result.output).toBe(0);
+      const rows = readFileSync(file, "utf8")
+        .trim()
+        .split("\n")
+        .map((row) => JSON.parse(row));
+      let active = 0,
+        peak = 0;
+      for (const row of rows) {
+        active += row.phase === "start" ? 1 : -1;
+        peak = Math.max(peak, active);
+      }
+      expect(rows).toHaveLength(16);
+      expect(peak).toBeGreaterThanOrEqual(1);
+      expect(peak).toBeLessThanOrEqual(Math.min(nativeWorkers, 2));
+      expect(active).toBe(0);
+      expect(new Set(rows.map((row) => row.coordinator)).size).toBe(1);
+    },
+  );
+  it("supports an explicit isolated execution mode", async () => {
+    const root = fixture();
+    const file = path.join(root, "nopo.yml");
+    const config = JSON.parse(readFileSync(file, "utf8"));
+    config.plugins[0].config = { execution: "isolated" };
+    writeFileSync(file, JSON.stringify(config));
+    const result = await nopo(root, "test", "alpha", "beta", "--concurrency=4");
+    expect(result.code, result.output).toBe(0);
+    expect(new Set(records(root).map((row) => row.parent)).size).toBe(2);
+  });
+});
+
+describe("reused native instance", () => {
+  it("does not carry a failing file into another request and initializes matching config once", async () => {
+    const root = fixture();
+    const dir = path.join(root, "apps/alpha");
+    const setup = path.join(dir, "global-setup.mjs");
+    writeFileSync(
+      setup,
+      `import {appendFileSync} from 'node:fs';export default ()=>{appendFileSync(${JSON.stringify(path.join(root, "setup.log"))},process.pid+'\\n');};`,
+    );
+    writeFileSync(
+      path.join(dir, "vitest.config.mjs"),
+      `export default {test:{include:['*.test.js'],pool:'forks',globalSetup:${JSON.stringify(setup)},maxWorkers:1,fileParallelism:false}};`,
+    );
+    for (const name of ["one", "two", "three"])
+      writeFileSync(
+        path.join(dir, `${name}.test.js`),
+        `import {test,expect} from 'vitest';import {appendFileSync} from 'node:fs';test('${name}',()=>{appendFileSync(${JSON.stringify(path.join(root, "ran.jsonl"))},JSON.stringify({target:'alpha',file:'${name}',parent:process.ppid})+'\\n');expect(1).toBe(${name === "two" ? 2 : 1});});`,
+      );
+    editTarget(root, "alpha", (config) => {
+      config.commands.test = {
+        commands: {
+          first: { plugin: "vitest", args: ["one.test.js"] },
+          second: { plugin: "vitest", args: ["two.test.js"] },
+          third: { plugin: "vitest", args: ["three.test.js"] },
+        },
+      };
+    });
+    const result = await nopo(
+      root,
+      "test",
+      "alpha",
+      "--no-fail-fast",
+      "--concurrency=4",
+    );
+    expect(result.code, result.output).toBe(1);
+    expect(records(root).map((row) => row.file)).toEqual([
+      "one",
+      "two",
+      "three",
+    ]);
+    expect(result.output).toMatch(/1 failed/);
+    expect(new Set(records(root).map((row) => row.parent)).size).toBe(1);
+    expect(
+      readFileSync(path.join(root, "setup.log"), "utf8").trim().split("\n"),
+    ).toHaveLength(1);
+    expect(result.output).toMatch(/3 ok, 1 failed, 1 skipped/);
+  });
+});
+
+it("fails a crashed active request, cleans its workers and continues queued independent work", async () => {
+  if (process.platform === "win32") return;
+  const root = fixture();
+  const crash = path.join(root, "apps/alpha/one.test.js");
+  writeFileSync(
+    crash,
+    `import {test} from 'vitest';import {writeFileSync} from 'node:fs';test('crash',()=>{writeFileSync(${JSON.stringify(path.join(root, "crash.json"))},JSON.stringify({worker:process.pid,coordinator:process.ppid}));process.kill(process.ppid,'SIGKILL');});`,
+  );
+  const result = await nopo(
+    root,
+    "test",
+    "alpha",
+    "beta",
+    "--no-fail-fast",
+    "--concurrency=4",
+  );
+  expect(result.code, result.output).toBe(1);
+  expect(result.output).toContain("Shared coordinator exited");
+  expect(records(root).filter((row) => row.target === "beta")).toHaveLength(2);
+  const pids = JSON.parse(readFileSync(path.join(root, "crash.json"), "utf8"));
+  expect(alive(pids.coordinator)).toBe(false);
+  // Orphan workers may briefly remain as zombies on Unix after the process-group kill.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(alive(pids.worker)).toBe(false);
+  expect(alive(records(root).at(-1)!.parent)).toBe(false);
+});
+
+it("reloads a native config changed between otherwise matching requests", async () => {
+  const root = fixture();
+  const dir = path.join(root, "apps", "alpha");
+  const count = path.join(root, "config-count");
+  const config = path.join(dir, "vitest.config.mjs");
+  editTarget(root, "alpha", (target) => {
+    target.commands.test = {
+      commands: {
+        first: { plugin: "vitest", args: ["one.test.js"] },
+        second: { plugin: "vitest", args: ["one.test.js"] },
+      },
+    };
+  });
+  writeFileSync(
+    path.join(dir, "one.test.js"),
+    `import {test,expect} from 'vitest';import {existsSync,writeFileSync} from 'node:fs';test('config reload',()=>{const later=existsSync(${JSON.stringify(count)});expect(process.env.TARGET).toBe(later?'changed':'alpha');writeFileSync(${JSON.stringify(count)},'1');writeFileSync(${JSON.stringify(config)},${JSON.stringify("export default {test:{include:['*.test.js'],pool:'forks',maxWorkers:1,env:{TARGET:'changed'}}};")});});`,
+  );
+  const result = await nopo(root, "test", "alpha");
+  expect(result.code, result.output).toBe(0);
+});
