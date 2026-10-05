@@ -942,6 +942,22 @@ export abstract class LegacyScript<TArgs = void> extends BaseScript {
 }
 
 export class Runner {
+  private disposal: Array<() => Promise<void>> = [];
+  /** Register an invocation-scoped resource's cleanup exactly once. */
+  onDispose(close: () => Promise<void>): void {
+    this.disposal.push(close);
+  }
+  async dispose(): Promise<void> {
+    const callbacks = this.disposal.splice(0).reverse();
+    const results = await Promise.allSettled(callbacks.map((close) => close()));
+    for (const result of results)
+      if (result.status === "rejected") {
+        this.io.stderr.write(
+          `nopo: resource cleanup failed: ${String(result.reason)}\n`,
+        );
+      }
+  }
+
   private decisionClient?: DecisionClient;
 
   get decisions(): DecisionClient {

@@ -81,3 +81,36 @@ describe("realIO.spawn", () => {
     },
   );
 });
+
+describe("realIO.openProcess", () => {
+  it("provides bidirectional IPC and tracks cleanup", async () => {
+    const channel = realIO.openProcess!("node", [
+      "-e",
+      "process.on('message',m=>{process.send({echo:m});process.disconnect();});",
+    ]);
+    const message = new Promise((resolve) => channel.onMessage(resolve));
+    await channel.send({ value: 42 });
+    expect(await message).toEqual({ echo: { value: 42 } });
+    expect(await channel.closed).toEqual({ exitCode: 0 });
+    await expect(channel.send({ value: 43 })).rejects.toThrow("closed");
+  });
+  it("reports spawn errors through the channel without unhandled rejections", async () => {
+    const channel = realIO.openProcess!("/definitely/missing/nopo-process", []);
+    await expect(channel.closed).rejects.toThrow();
+    await expect(channel.send({})).rejects.toThrow();
+  });
+  it("terminates a coordinator and its native workers as one process group", async () => {
+    if (process.platform === "win32") return;
+    const channel = realIO.openProcess!("node", [
+      "-e",
+      "const {spawn}=require('node:child_process');const child=spawn('node',['-e','setInterval(()=>{},1000)']);process.send({pid:child.pid});child.once('exit',()=>process.exit());process.on('SIGTERM',()=>{});",
+    ]);
+    const message = new Promise<{ pid: number }>((resolve) =>
+      channel.onMessage((value) => resolve(value as { pid: number })),
+    );
+    const { pid } = await message;
+    channel.kill("SIGTERM");
+    expect((await channel.closed).exitCode).toBe(0);
+    expect(() => process.kill(pid, 0)).toThrow();
+  });
+});

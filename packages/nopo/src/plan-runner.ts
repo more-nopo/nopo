@@ -347,6 +347,7 @@ function wrapIOForNode(
     exit: (code: number) => io.exit(code),
     stdout: wrappedStdout,
     stderr: wrappedStderr,
+    openProcess: io.openProcess?.bind(io),
     spawn(
       cmd: string,
       args: string[],

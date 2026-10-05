@@ -18,12 +18,15 @@ import {
 } from "@more-nopo/nopo/plugin";
 import { ScriptArgs } from "@more-nopo/nopo/script-args";
 import { z } from "zod";
+import { configureSession, runVitestProcess } from "./session.ts";
 import { observeTestRun } from "@more-nopo/nopo-test-relevance";
 import { vitestCandidates } from "./discovery.ts";
 import { policySchema, runWithPolicy, type TestPolicy } from "./test-policy.ts";
 
 const optionsSchema = z
   .object({
+    execution: z.enum(["shared", "isolated"]).optional(),
+    workers: z.number().int().min(1).optional(),
     args: z.array(z.string()).default([]),
     test: policySchema.optional(),
     env: z.record(z.string()).default({}),
@@ -232,7 +235,7 @@ async function spawnVitest(
         );
       return inventory;
     },
-    () => context.exec("node", argv, { cwd, env, stdio: "inherit" }),
+    () => runVitestProcess(context, argv, { cwd, env, stdio: "inherit" }),
   );
 }
 
@@ -242,6 +245,7 @@ export async function executeVitest(
   mode: "run" | "list",
   project: ProjectOptions,
 ): Promise<void> {
+  configureSession(context, project);
   // ScriptArgs deliberately accepts unknown options for older plugins. Here a
   // misplaced Vitest filter must fail, rather than silently running the full suite.
   const invocationArgs = context.argv ?? context.runner.argv?.slice(2) ?? [];

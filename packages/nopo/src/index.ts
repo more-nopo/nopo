@@ -348,7 +348,10 @@ export default async function main(io: IO): Promise<void> {
       await runPluginCommand(pluginCmd, runner, argv.slice(2));
     } catch (error) {
       logError(runner, error);
+      await runner.dispose();
       io.exit(1);
+    } finally {
+      await runner.dispose();
     }
     return;
   }
@@ -404,8 +407,10 @@ export default async function main(io: IO): Promise<void> {
     await runner.run(ScriptClass);
   } catch (error) {
     logError(runner, error);
+    await runner.dispose();
     io.exit(1);
   } finally {
+    await runner.dispose();
     if (timer) clearTimeout(timer);
     lease.release();
   }

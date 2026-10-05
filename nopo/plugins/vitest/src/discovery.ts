@@ -1,4 +1,5 @@
 import path from "node:path";
+import { runVitestProcess } from "./session.ts";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import type { Inventory } from "@more-nopo/nopo-test-relevance";
 
@@ -17,15 +18,16 @@ export async function vitestCandidates(
       if (!arg.includes("=")) i++;
     } else args.push(arg);
   }
-  const result = await ctx.io.spawn(
-    cmd,
+  const result = await runVitestProcess(
+    ctx,
     [argv[0]!, "list", ...args, "--filesOnly", "--json"],
     {
-      ...options,
-      stdio: "pipe",
-      onChunk: undefined,
-      signal: AbortSignal.timeout(10000),
+      cwd: options?.cwd,
+      env: options?.env,
+      silent: true,
+      nothrow: true,
     },
+    AbortSignal.timeout(10_000),
   );
   if (result.exitCode) throw new Error("vitest-list-failed");
   const rows: unknown = JSON.parse(result.stdout);

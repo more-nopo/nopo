@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
 import { observeTestRun } from "@more-nopo/nopo-test-relevance";
+import { runVitestProcess } from "./session.ts";
 import { vitestCandidates } from "./discovery.ts";
 
 export const policySchema = z
@@ -177,12 +178,12 @@ export async function runWithPolicy(
         silent: capture,
         nothrow,
       };
-      if (mode === "list") return context.exec("node", argv, options);
+      if (mode === "list") return runVitestProcess(context, argv, options);
       return observeTestRun(
         context,
         { runner: "vitest", cwd: root, relevance: policy.relevance },
         () => vitestCandidates(context, "node", argv, { cwd: root, env }),
-        () => context.exec("node", argv, options),
+        () => runVitestProcess(context, argv, options),
       );
     };
     const list = async (args: string[], configFile = gateConfig) => {

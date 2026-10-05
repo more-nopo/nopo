@@ -35,6 +35,14 @@ export interface SpawnResult {
   stderr: string;
 }
 
+/** A tracked, bidirectional JSON IPC channel for invocation-scoped tools. */
+export interface ProcessChannel {
+  send(message: unknown): Promise<void>;
+  onMessage(listener: (message: unknown) => void): () => void;
+  closed: Promise<{ exitCode: number }>;
+  kill(signal?: NodeJS.Signals): void;
+}
+
 export interface IO {
   argv: string[];
   /** Typed as `NodeJS.ProcessEnv` so realIO can pass `process.env` through directly — index
@@ -50,6 +58,12 @@ export interface IO {
   exit(code: number): never;
   spawn(cmd: string, args: string[], opts?: SpawnOpts): Promise<SpawnResult>;
   platform: NodeJS.Platform;
+  /** Optional for lightweight/mock IO implementations; real CLI IO supplies it. */
+  openProcess?(
+    cmd: string,
+    args: string[],
+    opts?: Omit<SpawnOpts, "stdio" | "input">,
+  ): ProcessChannel;
 }
 
 /** Spawns real child processes, reads/writes the real process std streams, and exits the
@@ -80,6 +94,68 @@ class RealIO implements IO {
 
   exit(code: number): never {
     return process.exit(code);
+  }
+
+  openProcess(
+    cmd: string,
+    args: string[],
+    opts: Omit<SpawnOpts, "stdio" | "input"> = {},
+  ): ProcessChannel {
+    const grouped = process.platform !== "win32";
+    const proc = childSpawn(cmd, args, {
+      cwd: opts.cwd,
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      serialization: "json",
+      detached: grouped,
+    });
+    const kill = (signal: NodeJS.Signals = "SIGTERM") => {
+      try {
+        if (grouped && proc.pid) process.kill(-proc.pid, signal);
+        else proc.kill(signal);
+      } catch {
+        proc.kill(signal);
+      }
+    };
+    trackChild({ kill, once: (event, listener) => proc.once(event, listener) });
+    proc.stdout?.on("data", (chunk) => opts.onChunk?.(chunk, "stdout"));
+    proc.stderr?.on("data", (chunk) => opts.onChunk?.(chunk, "stderr"));
+    const closed = new Promise<{ exitCode: number }>((resolve, reject) => {
+      proc.once("error", reject);
+      proc.once("close", (code, signal) =>
+        resolve({
+          exitCode:
+            code ?? (signal ? 128 + (constants.signals[signal] ?? 0) : 1),
+        }),
+      );
+    });
+    const abort = () => kill();
+    if (opts.signal?.aborted) abort();
+    else opts.signal?.addEventListener("abort", abort, { once: true });
+    void closed.then(
+      () => opts.signal?.removeEventListener("abort", abort),
+      () => opts.signal?.removeEventListener("abort", abort),
+    );
+    return {
+      send: (message) =>
+        new Promise((resolve, reject) => {
+          if (!proc.connected) {
+            reject(new Error("Process IPC channel is closed"));
+            return;
+          }
+          proc.send(message as Parameters<typeof proc.send>[0], (error) =>
+            error ? reject(error) : resolve(),
+          );
+        }),
+      onMessage: (listener) => {
+        proc.on("message", listener);
+        return () => {
+          proc.off("message", listener);
+        };
+      },
+      closed,
+      kill,
+    };
   }
 
   spawn(
