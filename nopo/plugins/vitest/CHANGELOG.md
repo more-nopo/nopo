@@ -1,5 +1,17 @@
 # @more-nopo/nopo-plugin-vitest
 
+## 0.4.0
+
+### Minor Changes
+
+- d870c71: Pool Vitest DAG commands through an invocation-scoped Node coordinator with a shared native worker limit. Preserve native configuration and task results, reuse compatible instances, and clean up workers on failures or shutdown. Add tracked IPC channels and Runner disposal for plugin-owned resources. Configure `workers` (default two) or `execution: isolated` on the Vitest plugin.
+
+### Patch Changes
+
+- Updated dependencies [d870c71]
+  - @more-nopo/nopo@0.3.0
+  - @more-nopo/nopo-test-relevance@0.0.2
+
 ## 0.3.0
 
 ### Minor Changes
