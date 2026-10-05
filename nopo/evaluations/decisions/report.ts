@@ -7,6 +7,7 @@ export interface EvaluationResult {
   result?: { status: string; answers?: unknown; model?: string };
   changedFiles?: string[];
   ranking?: { file: string; probability: number | null }[];
+  cohorts?: { name: string; files: string[] }[];
   knownFailures?: string[];
   observedFailures?: string[];
   relevant?: string[];
@@ -26,7 +27,7 @@ const cell = (value: string) =>
     .replace(/\|/g, "\\|")
     .replace(/`/g, "\\`");
 export function evaluationHeader(mode: string) {
-  return `Decision evaluation: ${mode}\n${descriptions[mode]}\nDiff + dependency graph + native test inventory → relevance scores → unchanged native full suite.\nReplay/mock timing is local lookup overhead, not API latency. Scores are not calibrated failure probabilities. Quality gates: relevant >= 0.65, independent <= 0.40, relevant outranks independent.\n`;
+  return `Decision evaluation: ${mode}\n${descriptions[mode]}\nDiff + dependency graph + native test inventory → relevance scores → unchanged native full suite.\nReplay/mock timing is local lookup overhead, not API latency. Scores are not calibrated failure probabilities. Small-control gates: relevant >= 0.65, independent <= 0.40. The 100-file fixture uses affected >= 0.50, direct >= 0.80, unrelated <= 0.20; affected outranks independent.\n`;
 }
 export function scenarioReport(result: EvaluationResult): string {
   const rows = result.ranking ?? [];
@@ -49,6 +50,7 @@ export function scenarioReport(result: EvaluationResult): string {
   if (rows.length) {
     lines.push(
       "Baseline: all tests passed before mutation. Full suite retained; skipped files: 0.",
+      "Mutation result is the native test outcome after the injected bug: FAIL catches it; PASS still passes. Scenario PASS means evaluation checks succeeded, including expected test failures.",
       "",
       "| Test | Relevance score | Expected relationship | Mutation result |",
       "| --- | ---: | --- | --- |",
@@ -69,6 +71,55 @@ export function scenarioReport(result: EvaluationResult): string {
       "",
       `Illustration only: a score >= 0.65 would select ${hypothetical.length}/${rows.length} files and miss ${missed.length}/${result.observedFailures?.length ?? 0} observed mutation failures. No filtering or speedup measured.`,
     );
+  }
+  if (result.cohorts && rows.length) {
+    lines.push(
+      "",
+      "Dependency/behavior cohorts (distance alone does not determine relevance):",
+      "",
+      "| Cohort | Files | Min | Median | Max | Mutation failures |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+    );
+    for (const cohort of result.cohorts) {
+      const scores = rows
+        .filter(
+          (row) =>
+            cohort.files.includes(path.basename(row.file)) &&
+            row.probability !== null,
+        )
+        .map((row) => row.probability!)
+        .sort((a, b) => a - b);
+      const median = scores.length
+        ? (scores[Math.floor((scores.length - 1) / 2)]! +
+            scores[Math.floor(scores.length / 2)]!) /
+          2
+        : NaN;
+      lines.push(
+        `| ${cell(cohort.name)} | ${scores.length} | ${scores[0]?.toFixed(3) ?? "unscored"} | ${median.toFixed(3)} | ${scores[scores.length - 1]?.toFixed(3) ?? "unscored"} | ${cohort.files.filter((file) => result.observedFailures?.includes(file)).length} |`,
+      );
+    }
+    const bins = Array.from(
+      { length: 10 },
+      (_, bin) =>
+        rows.filter(
+          (row) =>
+            row.probability !== null &&
+            Math.min(9, Math.floor(row.probability * 10)) === bin,
+        ).length,
+    );
+    lines.push(
+      "",
+      `Score histogram [0.0–0.1, …, 0.9–1.0]: ${bins.join(", ")}. Occupied bands: ${bins.filter((count) => count > 0).length}/10.`,
+      "",
+      "| Top K (illustration only) | Mutation failures retained |",
+      "| ---: | ---: |",
+    );
+    for (const k of [10, 25, 50, 75, 100]) {
+      const selected = rows.slice(0, k).map((row) => path.basename(row.file));
+      lines.push(
+        `| ${k} | ${(result.observedFailures ?? []).filter((file) => selected.includes(file)).length}/${result.observedFailures?.length ?? 0} |`,
+      );
+    }
   }
   if (result.error) lines.push(`Error: ${cell(result.error)}`);
   return lines.join("\n") + "\n";
