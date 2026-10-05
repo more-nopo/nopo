@@ -1,5 +1,13 @@
 # @more-nopo/nopo-plugin-bun
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [d870c71]
+  - @more-nopo/nopo@0.3.0
+  - @more-nopo/nopo-test-relevance@0.0.2
+
 ## 0.3.0
 
 ### Minor Changes

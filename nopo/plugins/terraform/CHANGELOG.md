@@ -1,5 +1,12 @@
 # @more-nopo/nopo-plugin-terraform
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [d870c71]
+  - @more-nopo/nopo@0.3.0
+
 ## 0.0.5
 
 ### Patch Changes

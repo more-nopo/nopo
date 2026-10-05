@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-docker",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@more-nopo/nopo": "^0.2.0",
+    "@more-nopo/nopo": "^0.3.0",
     "glob": "^11.0.0"
   },
   "devDependencies": {
