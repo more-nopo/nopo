@@ -154,7 +154,7 @@ export async function runWithPolicy(
   config: string | undefined,
   policy: TestPolicy,
 ) {
-  const parsed = relevanceArgs(argv, policy.relevance);
+  const parsed = relevanceArgs(argv, policy.relevance, context.io.env);
   argv = parsed.args;
   policy = { ...policy, relevance: parsed.relevance };
   const temporary = mkdtempSync(path.join(tmpdir(), "nopo-vitest-policy-"));

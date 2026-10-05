@@ -215,12 +215,12 @@ async function spawnVitest(
   relevanceRoots?: string[],
 ): Promise<void> {
   // Through nopo IO: argv boundaries, streamed output, and tracked subprocesses.
-  const parsed = relevanceArgs(args, relevance);
-  const scopedRoots = args.some(
-    (arg) => arg === "--relevance" || arg.startsWith("--relevance="),
-  )
-    ? undefined
-    : relevanceRoots;
+  const parsed = relevanceArgs(args, relevance, context.io.env);
+  const scopedRoots =
+    context.io.env.NOPO_RELEVANCE_MODE ||
+    args.some((arg) => arg === "--relevance" || arg.startsWith("--relevance="))
+      ? undefined
+      : relevanceRoots;
   const argv = [binary, ...parsed.args];
   await observeTestRun(
     context,
@@ -399,6 +399,7 @@ export async function executeVitest(
     (target) => relevanceOptions(target.test?.relevance).mode !== "off",
   );
   if (
+    !context.io.env.NOPO_RELEVANCE_MODE &&
     !passthrough.some(
       (arg) => arg === "--relevance" || arg.startsWith("--relevance="),
     ) &&

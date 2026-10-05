@@ -32,3 +32,23 @@ it("rejects invalid thresholds and removes plugin flags from native argv", () =>
     threshold: 0.7,
   });
 });
+
+it("supports runner-only environment opt-in with CLI taking precedence", () => {
+  const env = { NOPO_RELEVANCE_MODE: "dry", NOPO_RELEVANCE_THRESHOLD: ".7" };
+  expect(relevanceArgs(["file.test.ts"], undefined, env)).toEqual({
+    args: ["file.test.ts"],
+    relevance: { mode: "dry", threshold: 0.7 },
+  });
+  expect(relevanceArgs(["--relevance=off"], undefined, env).relevance).toBe(
+    "off",
+  );
+  expect(
+    relevanceArgs([], { mode: "select", threshold: 0.2 }, env).relevance,
+  ).toEqual({ mode: "dry", threshold: 0.7 });
+  expect(() =>
+    relevanceArgs([], undefined, { NOPO_RELEVANCE_THRESHOLD: ".7" }),
+  ).toThrow();
+  expect(() =>
+    relevanceArgs([], undefined, { ...env, NOPO_RELEVANCE_THRESHOLD: "NaN" }),
+  ).toThrow();
+});
