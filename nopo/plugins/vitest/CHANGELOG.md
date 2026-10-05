@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-vitest
 
+## 0.4.2
+
+### Patch Changes
+
+- 32b71e1: Preserve native changed and related source filters in shared-process file inventories. Quarantine audits and caller selection budgets now see the same files that native execution runs.
+
 ## 0.4.1
 
 ### Patch Changes
