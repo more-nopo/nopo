@@ -13,8 +13,16 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { score } from "./score.ts";
-import type { Evidence } from "./evidence.ts";
+import {
+  createConfig,
+  Runner,
+  Logger,
+} from "../../../packages/nopo/src/lib.ts";
+import { realIO } from "../../../packages/nopo/src/io.ts";
+import { decisionRequestHash } from "../../../packages/nopo/src/decisions/index.ts";
+import { evidence } from "../../plugins/test-relevance/src/evidence.ts";
+import { relevanceRequest } from "../../plugins/test-relevance/src/index.ts";
+import type { HookContext } from "../../../packages/nopo/src/plugin.ts";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.resolve(directory, "../../../packages/nopo/bin.ts");
@@ -38,13 +46,22 @@ function fixture(runner: "bun" | "vitest") {
     path.join(root, "node_modules/vitest"),
     "junction",
   );
+  writeFileSync(
+    path.join(root, ".gitignore"),
+    ".env\nreports/\nnode_modules/\napps/demo/ran.txt\n",
+  );
   writeFileSync(path.join(root, "package.json"), '{"type":"module"}');
   writeFileSync(
     path.join(root, "nopo.yml"),
     JSON.stringify({
       name: "fixture",
       services: { dirs: ["apps"] },
-      plugins: [{ name: runner, path: path.join(directory, `${runner}.ts`) }],
+      plugins: [
+        {
+          name: runner,
+          path: path.resolve(directory, `../../plugins/${runner}/src/index.ts`),
+        },
+      ],
     }),
   );
   writeFileSync(
@@ -89,12 +106,65 @@ function fixture(runner: "bun" | "vitest") {
   );
   return root;
 }
-function run(
+async function run(
   root: string,
   provider = "mock",
   argv = ["test", "demo"],
   enabled = true,
 ) {
+  configure(root, (config) => {
+    const name = config.commands.test.plugin;
+    config.plugins ??= {};
+    config.plugins[name] ??= {};
+    config.plugins[name].test ??= {};
+    config.plugins[name].test.relevance = enabled ? "observe" : "off";
+  });
+  const projectFile = path.join(root, "nopo.yml");
+  const project = JSON.parse(readFileSync(projectFile, "utf8"));
+  project.decisions = {
+    baseUrl: "https://example.invalid",
+    model: "fixture",
+    ...(provider === "mock" ? { mockResponses: path.join(root, ".env") } : {}),
+  };
+  writeFileSync(projectFile, JSON.stringify(project));
+  if (provider === "mock") {
+    const config = createConfig({
+      rootDir: root,
+      processEnv: {},
+      silent: true,
+    });
+    const runner = new Runner(
+      config,
+      { env: {}, extraEnv: {} } as Runner["environment"],
+      [],
+      new Logger(config),
+      realIO,
+    );
+    const responses: Record<string, unknown> = {};
+    // Cover every native subset (profiles, argv filters, gate and audit) with exact replay identities.
+    for (let mask = 1; mask < 8; mask++) {
+      const files = ["one", "two", "three"]
+        .filter((_, i) => mask & (1 << i))
+        .map((name) => path.join(root, `apps/demo/${name}.test.ts`));
+      const input = await evidence(
+        { runner, io: realIO } as HookContext,
+        files,
+      );
+      responses[decisionRequestHash("fixture", relevanceRequest(input))] = {
+        model: "fixture",
+        answers: Object.fromEntries(
+          input.candidates.map((candidate) => [
+            candidate.id,
+            { type: "noul", noul: 0.5 },
+          ]),
+        ),
+      };
+    }
+    writeFileSync(
+      path.join(root, ".env"),
+      JSON.stringify({ schemaVersion: 1, responses }),
+    );
+  }
   const r = spawnSync("bun", [cli, ...argv], {
     cwd: root,
     encoding: "utf8",
@@ -104,18 +174,18 @@ function run(
       NOPO_NO_QUEUE: "1",
       DOCKER_PORT: "80",
       ROOT_DIR: root,
-      NOPO_JEV_PROVIDER: provider,
-      NOPO_JEV_REPORT_DIR: enabled ? path.join(root, "reports") : "",
-      TYPESAFE_API_KEY: "",
+
+      NOPO_RELEVANCE_REPORT_DIR: enabled ? path.join(root, "reports") : "",
+      OPENROUTER_API_KEY: "",
     },
   });
   return { ...r, output: r.stdout + r.stderr };
 }
-describe("ranking inside runner plugins", () => {
+describe("ranking inside runner plugins", async () => {
   for (const runner of ["vitest", "bun"] as const) {
-    it(`${runner}: emits scores but executes every file`, () => {
+    it(`${runner}: emits scores but executes every file`, async () => {
       const root = fixture(runner);
-      const result = run(root);
+      const result = await run(root);
       expect(result.status, result.output).toBe(0);
       expect(
         readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
@@ -135,7 +205,7 @@ describe("ranking inside runner plugins", () => {
       );
       expect(report).toMatchObject({
         mode: "observe",
-        provider: "mock",
+
         status: "ranked",
         skippedFiles: 0,
       });
@@ -147,7 +217,7 @@ describe("ranking inside runner plugins", () => {
         ),
       ).toBe(true);
     });
-    it(`${runner}: missing credentials still runs the full suite and preserves failure`, () => {
+    it(`${runner}: missing credentials still runs the full suite and preserves failure`, async () => {
       const root = fixture(runner);
       const file = path.join(root, "apps/demo/three.test.ts");
       writeFileSync(
@@ -157,7 +227,7 @@ describe("ranking inside runner plugins", () => {
           "expect(1).toBe(2)",
         ),
       );
-      const result = run(root, "jev");
+      const result = await run(root, "jev");
       expect(result.status).toBe(1);
       expect(
         readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8")
@@ -184,44 +254,6 @@ describe("ranking inside runner plugins", () => {
   }
 });
 
-const input: Evidence = {
-  baseSha: "a",
-  mergeBase: "a",
-  changed: ["source.ts"],
-  graph: [],
-  candidates: [
-    { id: "abc", file: "a.test.ts", changed: false, excerpt: "test" },
-  ],
-  diff: "diff",
-  diffTruncated: false,
-  fingerprint: "a",
-  untrackedContentIncluded: false,
-};
-it("uses Jev's typed question contract and rejects missing, unknown, and invalid scores", async () => {
-  const responses = [
-    { answers: {} },
-    { answers: { abc: { type: "noul", noul: 2 } } },
-    {
-      answers: {
-        abc: { type: "noul", noul: 0.2 },
-        invented: { type: "noul", noul: 1 },
-      },
-    },
-  ];
-  for (const body of responses)
-    await expect(
-      score(input, "jev", "fixture", async () => Response.json(body)),
-    ).rejects.toThrow();
-  const result = await score(input, "jev", "fixture", async (url, init) => {
-    expect(url).toBe("https://api.typesafe.ai/v1/systemone");
-    const request = JSON.parse(String(init?.body));
-    expect(request.questions.abc.type).toBe("noul");
-    expect(request.questions.abc.instructions.candidate.file).toBe("a.test.ts");
-    return Response.json({ answers: { abc: { type: "noul", noul: 0.25 } } });
-  });
-  expect(result.get("abc")).toBe(0.25);
-});
-
 function reports(root: string) {
   return readdirSync(path.join(root, "reports")).map((file) =>
     JSON.parse(readFileSync(path.join(root, "reports", file), "utf8")),
@@ -233,7 +265,7 @@ function configure(root: string, update: (config: any) => void) {
   update(config);
   writeFileSync(file, JSON.stringify(config));
 }
-it("Bun ranks resolved profile files and respects explicit replacement", () => {
+it("Bun ranks resolved profile files and respects explicit replacement", async () => {
   const root = fixture("bun");
   configure(root, (config) => {
     config.plugins = {
@@ -247,7 +279,7 @@ it("Bun ranks resolved profile files and respects explicit replacement", () => {
     };
     config.commands.test.args = ["--profile=unit"];
   });
-  let result = run(root);
+  let result = await run(root);
   expect(result.status, result.output).toBe(0);
   expect(reports(root)[0].ranking.map((row: any) => row.file)).toEqual([
     "apps/demo/one.test.ts",
@@ -259,13 +291,13 @@ it("Bun ranks resolved profile files and respects explicit replacement", () => {
   configure(root, (config) => {
     config.commands.test.args.push("--files", "two.test.ts");
   });
-  result = run(root);
+  result = await run(root);
   expect(result.status, result.output).toBe(0);
   expect(reports(root)[0].ranking.map((row: any) => row.file)).toEqual([
     "apps/demo/two.test.ts",
   ]);
 });
-it("Vitest observes gate and mandatory quarantine audit separately after shard clamping", () => {
+it("Vitest observes gate and mandatory quarantine audit separately after shard clamping", async () => {
   const root = fixture("vitest");
   const file = path.join(root, "apps/demo/three.test.ts");
   writeFileSync(
@@ -285,11 +317,11 @@ it("Vitest observes gate and mandatory quarantine audit separately after shard c
     };
     config.commands.test.args.push("--shard=1/8");
   });
-  const baseline = run(root, "mock", ["test", "demo"], false);
+  const baseline = await run(root, "mock", ["test", "demo"], false);
   expect(baseline.status, baseline.output).toBe(0);
   const before = readFileSync(path.join(root, "apps/demo/ran.txt"), "utf8");
   rmSync(path.join(root, "apps/demo/ran.txt"));
-  const result = run(root);
+  const result = await run(root);
   expect(result.status, result.output).toBe(0);
   expect(result.output).toContain("still fail as expected");
   const observed = reports(root);
@@ -313,13 +345,18 @@ it("Vitest observes gate and mandatory quarantine audit separately after shard c
   ).toBe(true);
 });
 for (const runner of ["bun", "vitest"] as const) {
-  it(`${runner}: direct plugin invocation ranks and print does not execute`, () => {
+  it(`${runner}: direct plugin invocation ranks and print does not execute`, async () => {
     const root = fixture(runner);
     const command = runner === "bun" ? "test" : "run";
-    const preview = run(root, "mock", [runner, command, "demo", "--print"]);
+    const preview = await run(root, "mock", [
+      runner,
+      command,
+      "demo",
+      "--print",
+    ]);
     expect(preview.status, preview.output).toBe(0);
     expect(readdirSync(root)).not.toContain("reports");
-    const result = run(root, "mock", [
+    const result = await run(root, "mock", [
       runner,
       command,
       "demo",
@@ -332,12 +369,12 @@ for (const runner of ["bun", "vitest"] as const) {
     ]);
   });
 }
-it("Bun unknown discovery options do not prevent native execution", () => {
+it("Bun unknown discovery options do not prevent native execution", async () => {
   const root = fixture("bun");
   configure(root, (config) => {
     config.commands.test.args = ["--bail"];
   });
-  const result = run(root);
+  const result = await run(root);
   expect(result.status, result.output).toBe(0);
   expect(reports(root)[0]).toMatchObject({
     status: "unavailable",
@@ -350,9 +387,9 @@ it("Bun unknown discovery options do not prevent native execution", () => {
       .split("\n"),
   ).toHaveLength(3);
 });
-it("disabled observation produces no report and retains execution", () => {
+it("disabled observation produces no report and retains execution", async () => {
   const root = fixture("vitest");
-  const result = run(root, "mock", ["test", "demo"], false);
+  const result = await run(root, "mock", ["test", "demo"], false);
   expect(result.status, result.output).toBe(0);
   expect(readdirSync(root)).not.toContain("reports");
 });

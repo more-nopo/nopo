@@ -1,3 +1,4 @@
+import { createDecisionClient } from "../decisions/index.ts";
 import { describe, expect, it, vi } from "vitest";
 
 import { serializePlan } from "../plan.ts";
@@ -53,7 +54,8 @@ function stubRunner(overrides: StubRunnerOverrides = {}): StubRunner {
   // invokes exec/shell — the throw bodies guarantee that holds.
   const ioStub = mockIO({ argv: ["nopo"], cwd: "/" });
   /* eslint-disable @typescript-eslint/consistent-type-assertions -- exec/shell return ProcessPromise / ShellTag (heavy types from lib.ts); the stub never gets called so a function that throws is sufficient */
-  const contextIOStub: Pick<HookContext, "io" | "exec" | "shell"> = {
+  const contextIOStub: Pick<HookContext, "io" | "exec" | "shell" | "decisions"> = {
+    decisions: createDecisionClient(undefined),
     io: ioStub,
     exec: (() => {
       throw new Error("exec stub not implemented");

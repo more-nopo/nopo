@@ -138,3 +138,7 @@ summary. All other exits propagate, including OOM exit 137. Captured output stre
 through Nopo IO as it arrives; concurrent invocations do not share logs or require
 shell `tee`/temporary-log scripts. This workaround does not retry tests and does
 not accept an absent summary.
+
+## Decision observation
+
+Set `test.relevance: observe` in the plugin policy and configure root `decisions` to rank the resolved test scope through the shared core decision service. Execution retains every test and native exit behavior. See [decision configuration](../../docs/decisions.md) and the [behavioral evaluation](../../evaluations/decisions/README.md).

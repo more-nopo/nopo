@@ -21,7 +21,7 @@ export interface DownRunner {
     project: Parameters<typeof resolveRuntimePlugin>[0];
   };
   buildGraph(): HookContext["graph"];
-  contextIO(): Pick<HookContext, "io" | "exec" | "shell">;
+  contextIO(): Pick<HookContext, "io" | "exec" | "shell" | "decisions">;
   fireHooks(
     hookName: "pre_down" | "post_down",
     context: HookContext,

@@ -2,6 +2,8 @@ import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
+import { observeTestRun } from "@more-nopo/nopo-test-relevance";
+import { bunCandidates } from "./discovery.ts";
 
 export const profileSchema = z
   .object({
@@ -11,6 +13,7 @@ export const profileSchema = z
   .strict();
 export const testSchema = z
   .object({
+    relevance: z.enum(["off", "observe"]).optional(),
     profiles: z.record(profileSchema).optional(),
     shutdown: z.enum(["strict", "after-success"]).optional(),
   })
@@ -65,21 +68,19 @@ export async function runBunTest(
   options: TestOptions,
 ): Promise<void> {
   const args = selectTestArgs(argv, options, cwd);
+  const execute = (extra: { stdio: "pipe" | "inherit"; nothrow?: boolean }) =>
+    observeTestRun(
+      context,
+      { runner: "bun", cwd, relevance: options.relevance },
+      async () => bunCandidates(cwd, args),
+      () => context.exec("bun", ["test", ...args], { cwd, env, ...extra }),
+    );
   if (options.shutdown !== "after-success") {
-    await context.exec("bun", ["test", ...args], {
-      cwd,
-      env,
-      stdio: "inherit",
-    });
+    await execute({ stdio: "inherit" });
     return;
   }
   // Pipe through nopo IO: output remains streamed and each invocation has its own capture.
-  const result = await context.exec("bun", ["test", ...args], {
-    cwd,
-    env,
-    stdio: "pipe",
-    nothrow: true,
-  });
+  const result = await execute({ stdio: "pipe", nothrow: true });
   if (!result.exitCode) return;
   const output = `${result.stdout}\n${result.stderr}`.replace(
     /\u001b\[[0-9;]*m/g,

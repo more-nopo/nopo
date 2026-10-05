@@ -9,3 +9,5 @@
 **/.vite-temp
 gitleaks-report.json
 .docs-staging/
+
+.nopo/relevance/

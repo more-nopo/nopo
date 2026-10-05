@@ -18,6 +18,8 @@ import {
 } from "@more-nopo/nopo/plugin";
 import { ScriptArgs } from "@more-nopo/nopo/script-args";
 import { z } from "zod";
+import { observeTestRun } from "@more-nopo/nopo-test-relevance";
+import { vitestCandidates } from "./discovery.ts";
 import { policySchema, runWithPolicy, type TestPolicy } from "./test-policy.ts";
 
 const optionsSchema = z
@@ -200,9 +202,38 @@ async function spawnVitest(
   args: string[],
   cwd: string,
   env: Record<string, string>,
+  relevance?: "off" | "observe",
+  relevanceRoots?: string[],
 ): Promise<void> {
   // Through nopo IO: argv boundaries, streamed output, and tracked subprocesses.
-  await context.exec("node", [binary, ...args], { cwd, env, stdio: "inherit" });
+  const argv = [binary, ...args];
+  await observeTestRun(
+    context,
+    {
+      runner: "vitest",
+      cwd,
+      relevance: args[0] === "run" ? relevance : undefined,
+    },
+    async () => {
+      const inventory = await vitestCandidates(context, "node", argv, {
+        cwd,
+        env,
+      });
+      if (relevanceRoots)
+        inventory.files = inventory.files.filter((file) =>
+          relevanceRoots.some((root) => {
+            const relative = path.relative(root, file);
+            return (
+              relative !== ".." &&
+              !relative.startsWith("../") &&
+              !path.isAbsolute(relative)
+            );
+          }),
+        );
+      return inventory;
+    },
+    () => context.exec("node", argv, { cwd, env, stdio: "inherit" }),
+  );
 }
 
 export async function executeVitest(
@@ -331,6 +362,7 @@ export async function executeVitest(
       ],
       target.root,
       { ...baseEnv, ...target.env },
+      target.test?.relevance,
     );
     return;
   }
@@ -356,6 +388,12 @@ export async function executeVitest(
       [mode, "--config", configFile, ...project.args, ...passthrough],
       context.runner.config.root,
       { ...baseEnv, ...env },
+      targets.some((target) => target.test?.relevance === "observe")
+        ? "observe"
+        : undefined,
+      targets
+        .filter((target) => target.test?.relevance === "observe")
+        .map((target) => target.root),
     );
   } finally {
     rmSync(temporary, { recursive: true, force: true });

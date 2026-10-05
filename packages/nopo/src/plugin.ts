@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { DecisionClient } from "./decisions/index.ts";
 
 import type { DependencyGraph } from "./graph.ts";
 import type { IO } from "./io.ts";
@@ -37,6 +38,8 @@ export interface PluginCommandContext {
 }
 
 export interface HookContext {
+  /** Shared invocation-scoped decision service. Unconfigured calls return unavailable. */
+  decisions: DecisionClient;
   runner: Runner;
   args: ScriptArgs;
   graph: DependencyGraph;

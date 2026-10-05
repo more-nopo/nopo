@@ -187,3 +187,7 @@ config. Multi-target policy runs fail preflight explicitly; independent delegate
 commands retain their DAG execution. Configs, reporters and coverage remain native.
 Root plugin `config.test` can supply shared defaults, overridden by target `test`.
 Pass `--quarantine=off` after `--` to diagnose a quarantined test without the gate/audit policy.
+
+## Decision observation
+
+Set `test.relevance: observe` in the plugin policy and configure root `decisions` to rank the resolved test scope through the shared core decision service. Execution retains every test and native exit behavior. See [decision configuration](../../docs/decisions.md) and the [behavioral evaluation](../../evaluations/decisions/README.md).

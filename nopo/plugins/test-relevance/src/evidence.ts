@@ -10,7 +10,7 @@ export async function evidence(ctx: HookContext, files: string[]) {
     if (result.exitCode) throw new Error("git-context-unavailable");
     return result.stdout;
   };
-  const base = ctx.io.env.NOPO_JEV_BASE ?? "HEAD";
+  const base = ctx.io.env.NOPO_RELEVANCE_BASE ?? "HEAD";
   const baseSha = (
     await git("rev-parse", "--verify", "--end-of-options", `${base}^{commit}`)
   ).trim();

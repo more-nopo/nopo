@@ -12,9 +12,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { HookContext } from "@more-nopo/nopo/plugin";
 import { z } from "zod";
+import { observeTestRun } from "@more-nopo/nopo-test-relevance";
+import { vitestCandidates } from "./discovery.ts";
 
 export const policySchema = z
   .object({
+    relevance: z.enum(["off", "observe"]).optional(),
     quarantine: z.string().min(1).optional(),
     sharding: z.enum(["native", "clamp"]).optional(),
   })
@@ -160,23 +163,28 @@ export async function runWithPolicy(
       configFile = gateConfig,
       capture = false,
       nothrow = false,
-    ) =>
-      context.exec(
-        "node",
-        [
-          binary,
-          mode,
-          ...(configFile ? ["--config", configFile] : []),
-          ...args,
-        ],
-        {
-          cwd: root,
-          env,
-          stdio: capture ? "pipe" : "inherit",
-          silent: capture,
-          nothrow,
-        },
+    ) => {
+      const argv = [
+        binary,
+        mode,
+        ...(configFile ? ["--config", configFile] : []),
+        ...args,
+      ];
+      const options = {
+        cwd: root,
+        env,
+        stdio: capture ? ("pipe" as const) : ("inherit" as const),
+        silent: capture,
+        nothrow,
+      };
+      if (mode === "list") return context.exec("node", argv, options);
+      return observeTestRun(
+        context,
+        { runner: "vitest", cwd: root, relevance: policy.relevance },
+        () => vitestCandidates(context, "node", argv, { cwd: root, env }),
+        () => context.exec("node", argv, options),
       );
+    };
     const list = async (args: string[], configFile = gateConfig) => {
       const report = path.join(temporary, "inventory.json");
       rmSync(report, { force: true });

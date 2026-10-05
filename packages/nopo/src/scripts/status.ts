@@ -18,6 +18,7 @@ export interface StatusRunnerLike {
   buildGraph(): DependencyGraph;
   contextIO(): {
     io: IO;
+    decisions: HookContext["decisions"];
     exec: HookContext["exec"];
     shell: HookContext["shell"];
   };
@@ -54,6 +55,7 @@ function buildHookContext(ctx: StatusPhaseContext): HookContext {
     args,
     graph: runner.buildGraph(),
     runtime,
+    decisions: wired.decisions,
     io: wired.io ?? io,
     exec: wired.exec,
     shell: wired.shell,
