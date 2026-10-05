@@ -98,7 +98,9 @@ async function cli(root: string, extraEnv: Record<string, string>) {
     },
   );
 }
-const fixtureFile = process.env.NOPO_DECISION_REPLAY_FILE;
+const fixtureFile = process.env.NOPO_DECISION_REPLAY_FILE
+  ? path.resolve(process.env.NOPO_DECISION_REPLAY_FILE)
+  : undefined;
 if (mode === "replay" && !fixtureFile)
   throw new Error("Replay requires NOPO_DECISION_REPLAY_FILE");
 const primitive: DecisionRequest = {
