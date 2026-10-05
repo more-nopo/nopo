@@ -103,7 +103,7 @@ describe("realIO.openProcess", () => {
     if (process.platform === "win32") return;
     const channel = realIO.openProcess!("node", [
       "-e",
-      "const {spawn}=require('node:child_process');const child=spawn('node',['-e','setInterval(()=>{},1000)']);process.send({pid:child.pid});child.once('exit',()=>process.exit());process.on('SIGTERM',()=>{});",
+      "const {spawn}=require('node:child_process');const child=spawn('node',['-e','setInterval(()=>{},1000)']);child.once('exit',()=>process.exit());process.on('SIGTERM',()=>{});process.send({pid:child.pid});",
     ]);
     const message = new Promise<{ pid: number }>((resolve) =>
       channel.onMessage((value) => resolve(value as { pid: number })),
