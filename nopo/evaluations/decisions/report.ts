@@ -50,6 +50,7 @@ export function scenarioReport(result: EvaluationResult): string {
   if (rows.length) {
     lines.push(
       "Baseline: all tests passed before mutation. Full suite retained; skipped files: 0.",
+      "Mutation result is the native test outcome after the injected bug: FAIL catches it; PASS still passes. Scenario PASS means evaluation checks succeeded, including expected test failures.",
       "",
       "| Test | Relevance score | Expected relationship | Mutation result |",
       "| --- | ---: | --- | --- |",
