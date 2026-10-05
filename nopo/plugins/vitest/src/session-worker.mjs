@@ -158,7 +158,7 @@ async function handle(request) {
     runOutcome = undefined;
     let exitCode = 0;
     if (request.args[0] === "list") {
-      const specifications = await instance.globTestSpecifications(
+      const specifications = await instance.getRelevantTestSpecifications(
         parsed.filter,
       );
       const rows = specifications.map((spec) => ({

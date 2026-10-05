@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -715,3 +715,51 @@ it("reloads a native config changed between otherwise matching requests", async 
   const result = await nopo(root, "test", "alpha");
   expect(result.code, result.output).toBe(0);
 });
+
+it("shared native inventories respect changed and related source filters", async () => {
+  const root = fixture();
+  writeFileSync(
+    path.join(root, ".gitignore"),
+    "node_modules/\n.env\nran.jsonl\n",
+  );
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  git("init", "-q");
+  git("add", ".");
+  git(
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.invalid",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "commit",
+    "-qm",
+    "fixture",
+  );
+  const base = git("rev-parse", "HEAD").trim();
+  writeFileSync(
+    path.join(root, "apps/alpha/message.js"),
+    "export default 'alpha'; // changed\n",
+  );
+  for (const selector of [
+    [`--changed=${base}`],
+    ["--related", "apps/alpha/message.js"],
+  ]) {
+    const result = await run(
+      root,
+      "list",
+      "alpha",
+      "beta",
+      "--",
+      "--filesOnly",
+      "--json",
+      ...selector,
+    );
+    expect(result.code, result.output).toBe(0);
+    const rows = JSON.parse(result.stdout) as { file: string }[];
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.file.includes("alpha/"))).toBe(true);
+    expect(records(root)).toEqual([]);
+  }
+}, 60_000);
