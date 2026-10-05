@@ -32,3 +32,9 @@ bun nopo/evaluations/decisions/run.ts
 ## Initial live evidence
 
 [CI run 37248815680, attempt 2](https://github.com/more-nopo/nopo/actions/runs/37248815680/attempts/2) passed all nine scenarios with `typesafe/jev-1.13-20260917`. A second live run also passed. The first recording scored affected tests at 0.93–0.97 and independent tests at 0.02–0.05; scoring took 163–259 ms per runner scenario in CI. All 24 tests in mutated fixture runs were retained, including the 12 expected mutation failures. These numbers describe this small synthetic evaluation only. Replayed probabilities are fixed regression fixtures, not new accuracy measurements.
+
+## Reading CI output
+
+Both the main `ci` job (mock integration) and `decision-quality` job (recorded live answers by default) print a table for each scenario. The same tables appear in the Actions job summary and `summary.md` artifact. Each row shows the returned relevance score, the fixture's expected relationship to the change, and whether that test actually failed after the mutation. A scenario passes only when native execution and score quality gates both hold; expected mutation failures are successful evaluation evidence.
+
+The output names the mode and model, lists changed files, shows scoring and native execution time, and illustrates which files a threshold of 0.65 would select and how many observed failures that would miss. This is a counterfactual count, not filtering or a measured speedup. Replay timing measures replay overhead, not API latency. Native runner logs also print individual scores when observation is enabled. Full JSON and native logs remain available in `decision-evaluation` (quality) and `mock-decision-evaluation` (integration) artifacts.
