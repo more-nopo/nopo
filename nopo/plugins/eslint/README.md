@@ -52,6 +52,20 @@ flat config (named after its nopo target ID for diagnostics). ESLint runs once
 from the nopo project root. Lint messages are attributed back to targets by file
 path prefix; a non-zero exit reports which targets failed.
 
+Each file belongs to the deepest selected target whose root contains it, matching
+what a standalone run in that workspace would lint:
+
+- A target's global ignores (config objects with only `ignores`, such as
+  `includeIgnoreFile(".gitignore")`) stay global, rebased onto the target's root.
+  They are applied shallowest target first, and re-include the roots of deeper
+  selected targets, so a root ignore of `products/*` or `**/dist/` never hides
+  another selected target.
+- A target's other config objects are scoped to its root with `files` and skip
+  the roots of deeper selected targets.
+- A target without its own config (e.g. opted in via `plugin: eslint`) is linted
+  by the selected target whose config ESLint would find walking up from its root,
+  so it sees that config's rules and ignores, just like a standalone run.
+
 `--config` / `-c` can be forwarded for single-target runs. Multi-target runs
 reject them because nopo owns the meta-config. `--print` emits the resolved
 target/config mapping without loading configs or exposing environment values.

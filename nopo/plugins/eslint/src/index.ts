@@ -148,8 +148,50 @@ function validateForwardedArgs(
   }
 }
 
+/** A target without its own config lints standalone with the config ESLint finds
+ * by walking up from its root. When that is another selected target's config, the
+ * batch lints the target's files with that target's entries instead of carving
+ * it out (e.g. `.github/actions-ts` opted in via `plugin: eslint` under root).
+ */
+function inheritedTarget(
+  target: EslintTarget,
+  targets: readonly EslintTarget[],
+): string | null {
+  let directory = target.root;
+  for (;;) {
+    const found = configNames
+      .map((name) => path.join(directory, name))
+      .find((file) => statSync(file, { throwIfNoEntry: false })?.isFile());
+    if (found) {
+      const owner = targets.find(
+        (other) =>
+          other !== target &&
+          other.config === found &&
+          !path.relative(other.root, target.root).startsWith(".."),
+      );
+      return owner?.id ?? null;
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+
 /** Meta flat-config that scopes each target's native config under its project root.
  * ESLint loads this once; file path prefixes attribute results back to targets.
+ *
+ * Each file belongs to the deepest config-owning target whose root contains it
+ * (a config-less target inherits the selected target whose config ESLint would
+ * find for it, see inheritedTarget), so:
+ * - A target's rule entries get `files` scoped to its root and `ignores` for the
+ *   roots of deeper targets nested inside it (those files use their own config).
+ * - A target's global ignores (entries with only `ignores` and optionally `name`,
+ *   e.g. what `includeIgnoreFile()` returns) stay global so ignored files and
+ *   directories are never linted, but are rebased onto the target's root. Adding
+ *   `files` would turn them into no-op local ignores. Global ignore entries are
+ *   emitted shallowest target first, each followed by negations that re-include
+ *   deeper targets' roots, so e.g. a root workspace ignore of `products/ui/**`
+ *   or a `**\/dist/` pattern cannot hide a nested target or its files.
  */
 export function renderMetaConfig(
   targets: readonly EslintTarget[],
@@ -160,49 +202,157 @@ export function renderMetaConfig(
     root: target.root,
     config: target.config ?? null,
     relative: path.relative(cwd, target.root).split(path.sep).join("/") || ".",
+    inherits: target.config ? null : inheritedTarget(target, targets),
   }));
   return `import { pathToFileURL } from "node:url";
 import path from "node:path";
 
 const targets = ${JSON.stringify(payload)};
+const DEFAULT_FILES = "**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}";
 
 function asArray(value) {
   if (value == null) return [{}];
   return Array.isArray(value) ? value : [value];
 }
 
+function asList(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function trimSlashes(value) {
+  let result = value;
+  while (result.length > 1 && result.endsWith("/")) result = result.slice(0, -1);
+  return result;
+}
+
+/** Rebase one pattern from a target's root onto the meta config's cwd. */
+function rebasePattern(pattern, prefix) {
+  if (Array.isArray(pattern)) return pattern.map((item) => rebasePattern(item, prefix));
+  if (typeof pattern !== "string") return pattern;
+  if (pattern.startsWith("!")) return "!" + rebasePattern(pattern.slice(1), prefix);
+  if (path.isAbsolute(pattern)) return pattern;
+  let cleaned = pattern;
+  while (cleaned.startsWith("./")) cleaned = cleaned.slice(2);
+  if (prefix === "." || cleaned === prefix || cleaned.startsWith(prefix + "/")) return cleaned;
+  return path.posix.normalize(prefix + "/" + cleaned);
+}
+
 function scopePatterns(patterns, prefix) {
-  return asArray(patterns).flatMap((pattern) => {
+  return asList(patterns).map((pattern) => rebasePattern(pattern, prefix));
+}
+
+/** Rebase a target's global ignores onto its root. A pattern that matches a directory also
+ * gets a "<pattern>/**" twin so files inside stay ignored even after a deeper
+ * target's ancestor directory is re-included ("dist/" -> "dist/", "dist/**").
+ */
+function rebaseGlobalIgnores(patterns, prefix) {
+  return asList(patterns).flatMap((pattern) => {
     if (typeof pattern !== "string") return [pattern];
-    if (path.isAbsolute(pattern) || pattern.startsWith("!")) return [pattern];
-    const cleaned = pattern.replace(/^\\.\\//, "");
-    if (prefix === "." || cleaned.startsWith(prefix + "/")) return [cleaned];
-    return [prefix + "/" + cleaned];
+    const negated = pattern.startsWith("!");
+    const bang = negated ? "!" : "";
+    const rebased = rebasePattern(negated ? pattern.slice(1) : pattern, prefix);
+    // A standalone run can't ignore files outside its own root ("../other/**");
+    // don't let such a pattern hide another target's files in the shared config.
+    if (
+      prefix !== "." &&
+      !path.isAbsolute(rebased) &&
+      rebased !== prefix &&
+      !rebased.startsWith(prefix + "/")
+    ) {
+      return [];
+    }
+    const base = trimSlashes(rebased);
+    if (path.isAbsolute(rebased) || base.endsWith("/**") || base === "**") {
+      return [bang + rebased];
+    }
+    return [bang + rebased, bang + base + "/**"];
   });
 }
 
-function scopeEntry(entry, prefix, id) {
+function isGlobalIgnore(entry) {
+  return (
+    entry != null &&
+    typeof entry === "object" &&
+    !Array.isArray(entry) &&
+    "ignores" in entry &&
+    Object.keys(entry).every((key) => key === "ignores" || key === "name")
+  );
+}
+
+function isInside(child, parent) {
+  if (child === parent) return false;
+  return parent === "." ? child !== "." : child.startsWith(parent + "/");
+}
+
+/** Negations that re-include a nested target's root and its ancestors below
+ * the owning target: root "." + "a/b" -> ["!a/", "!a/b/**"].
+ */
+function reincludeTarget(nested, prefix) {
+  const parts = nested.split("/");
+  const skip = prefix === "." ? 0 : prefix.split("/").length;
+  const patterns = [];
+  for (let index = skip + 1; index < parts.length; index += 1) {
+    patterns.push("!" + parts.slice(0, index).join("/") + "/");
+  }
+  patterns.push("!" + nested + "/**");
+  return patterns;
+}
+
+function scopeEntry(entry, prefix, id, nestedRoots) {
   const scoped = { ...entry, name: entry.name ?? \`nopo:\${id}\` };
   scoped.files = entry.files
     ? scopePatterns(entry.files, prefix)
-    : [prefix === "." ? "**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}" : \`\${prefix}/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}\`];
-  if (entry.ignores) scoped.ignores = scopePatterns(entry.ignores, prefix);
+    : [prefix === "." ? DEFAULT_FILES : \`\${prefix}/\${DEFAULT_FILES}\`];
+  const ignores = [
+    ...(entry.ignores ? scopePatterns(entry.ignores, prefix) : []),
+    ...nestedRoots.map((nested) => nested + "/**"),
+  ];
+  if (ignores.length) scoped.ignores = ignores;
+  else delete scoped.ignores;
   return scoped;
 }
 
+const depth = (target) => (target.relative === "." ? 0 : target.relative.split("/").length);
+const ordered = targets
+  .map((target, index) => ({ target, index }))
+  .sort((a, b) => depth(a.target) - depth(b.target) || a.index - b.index)
+  .map(({ target }) => target);
+
+const owners = targets.filter((target) => !target.inherits);
+const globalIgnores = [];
 const configs = [];
-for (const target of targets) {
+for (const target of ordered) {
+  // Linted by the entries of the target whose config it inherits.
+  if (target.inherits) continue;
   const prefix = target.relative;
+  const nestedRoots = owners
+    .map((other) => other.relative)
+    .filter((other) => isInside(other, prefix));
   if (!target.config) {
-    configs.push(scopeEntry({}, prefix, target.id));
+    configs.push(scopeEntry({}, prefix, target.id, nestedRoots));
     continue;
   }
   const mod = await import(pathToFileURL(target.config).href);
+  const entries = [];
+  const ignores = [];
   for (const entry of asArray(mod.default)) {
-    configs.push(scopeEntry(entry ?? {}, prefix, target.id));
+    if (isGlobalIgnore(entry)) ignores.push(...rebaseGlobalIgnores(entry.ignores, prefix));
+    else entries.push(entry ?? {});
+  }
+  if (ignores.length) {
+    globalIgnores.push({
+      name: \`nopo:\${target.id}:global-ignores\`,
+      ignores: [...ignores, ...nestedRoots.flatMap((nested) => reincludeTarget(nested, prefix))],
+    });
+    // A config made only of global ignores still lints the target's own files.
+    if (!entries.length) entries.push({});
+  }
+  for (const entry of entries) {
+    configs.push(scopeEntry(entry, prefix, target.id, nestedRoots));
   }
 }
-export default configs;
+export default [...globalIgnores, ...configs];
 `;
 }
 
