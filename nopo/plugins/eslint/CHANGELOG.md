@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-eslint
 
+## 0.2.1
+
+### Patch Changes
+
+- 5171652: Stop lintBatch from validating top-level `nopo check` plan flags (`--skip-missing`, `--no-fail-fast`) as ESLint options by passing an empty `argv` into executeEslint.
+
 ## 0.2.0
 
 ### Minor Changes
