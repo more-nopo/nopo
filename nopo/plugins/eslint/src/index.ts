@@ -494,25 +494,138 @@ export async function executeEslint(
   }
 }
 
+
+/** Payload on the coalesced `eslint:batch` plan node. `targets` are the nopo service ids
+ * claimed from per-target `command:exec` nodes (`plugin: eslint`). `args` are optional
+ * delegated command args lifted from the first claimed task (identical across peers).
+ */
+export interface LintBatchPayload {
+  targets: string[];
+  args?: string[];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asLintBatchPayload(payload: unknown): LintBatchPayload {
+  if (isPlainObject(payload) && Array.isArray(payload.targets)) {
+    const targets = payload.targets.filter((t): t is string => typeof t === "string");
+    if (targets.length === payload.targets.length && targets.length > 0) {
+      const out: LintBatchPayload = { targets };
+      if (Array.isArray(payload.args) && payload.args.every((a) => typeof a === "string")) {
+        out.args = payload.args;
+      }
+      return out;
+    }
+  }
+  throw new Error(
+    `eslint lintBatch hook: payload missing { targets: string[] } (got ${JSON.stringify(payload)})`,
+  );
+}
+
+/** Whether a plan node is a CommandScript `command:exec` that delegates to this plugin.
+ * Used by the BatchSpec claim predicate so `nopo check:lint` / `nopo lint` fold N shells
+ * into one coordinator — same compaction contract as docker bake (`build:exec` → `build:bake`).
+ */
+export function isEslintCommandExecNode(node: {
+  handler: { kind: string; name?: string };
+  payload?: unknown;
+}): boolean {
+  if (node.handler.kind !== "builtin" || node.handler.name !== "command:exec") {
+    return false;
+  }
+  if (!isPlainObject(node.payload)) return false;
+  const task = node.payload.task;
+  return isPlainObject(task) && task.plugin === "eslint";
+}
+
+function extractEslintArgsFromClaimed(
+  claimed: ReadonlyArray<{ payload?: unknown }>,
+): string[] | undefined {
+  const first = claimed[0]?.payload;
+  if (!isPlainObject(first) || !isPlainObject(first.task)) return undefined;
+  const args = first.task.args;
+  if (!Array.isArray(args) || !args.every((a) => typeof a === "string")) {
+    return undefined;
+  }
+  return args.length ? args : undefined;
+}
+
 const eslintPlugin: NopoPluginFactory = (raw) => {
   const project = projectSchema.parse(raw);
+  const printArg = {
+    print: {
+      type: "boolean" as const,
+      default: false,
+      description: "Print selected targets without executing ESLint",
+    },
+  };
+
   return {
     name: "eslint",
     defaultCommand: "run",
     description: "Lint nopo targets with one ESLint coordinator",
     configSchema: { project: projectSchema, service: targetSchema },
+    hooks: {
+      /** Coalesced batch handler — invoked once per `nopo lint` / `nopo check:lint` (etc.)
+       * after plan compaction folds every `plugin: eslint` `command:exec` into one node.
+       * Mirrors docker `buildBatch` / bake: one ESLint coordinator, not N shells.
+       */
+      lintBatch: async (context: HookContext) => {
+        const payload = asLintBatchPayload(context.payload);
+        const args = new ScriptArgs(printArg).parse([]);
+        await executeEslint(
+          {
+            ...context,
+            positionals: payload.targets,
+            passthrough: payload.args ?? [],
+            commandContext: undefined,
+          },
+          args,
+          project,
+        );
+      },
+    },
+    batches: [
+      {
+        claims: (node) => isEslintCommandExecNode(node),
+        coalesce: (claimed) => {
+          const targets = claimed.map((node) => {
+            if (node.target !== undefined) return node.target;
+            if (
+              isPlainObject(node.payload) &&
+              isPlainObject(node.payload.task)
+            ) {
+              const service = node.payload.task.service;
+              if (typeof service === "string") return service;
+            }
+            throw new Error(
+              `eslint batch: claimed node "${node.id}" has no target`,
+            );
+          });
+          const payload: LintBatchPayload = { targets };
+          const delegatedArgs = extractEslintArgsFromClaimed(claimed);
+          if (delegatedArgs !== undefined) payload.args = delegatedArgs;
+          return {
+            id: "eslint:batch",
+            handler: {
+              kind: "plugin-hook",
+              plugin: "eslint",
+              hook: "lintBatch",
+            },
+            payload,
+            meta: { batchOf: claimed.map((n) => n.id) },
+          };
+        },
+      },
+    ],
     commands: [
       {
         name: "run",
         description:
           "nopo eslint run [targets...] [--print] -- [ESLint options and paths]",
-        args: new ScriptArgs({
-          print: {
-            type: "boolean",
-            default: false,
-            description: "Print selected targets without executing ESLint",
-          },
-        }),
+        args: new ScriptArgs(printArg),
         fn: (context, args) => executeEslint(context, args, project),
       },
     ],

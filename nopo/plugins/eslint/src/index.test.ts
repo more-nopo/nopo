@@ -12,9 +12,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedService } from "@more-nopo/nopo/config";
 import type { HookContext } from "@more-nopo/nopo/plugin";
+import type { PlanNode } from "@more-nopo/nopo/plan";
+import type { BatchSpec } from "@more-nopo/nopo/plan-compact";
 import plugin, {
   attributeResults,
   discoverTargets,
+  isEslintCommandExecNode,
   renderMetaConfig,
 } from "./index.ts";
 
@@ -322,5 +325,122 @@ describe("execution", () => {
     expect(source).toContain('"id":"a"');
     expect(source).toContain('"id":"b"');
     expect(source).toContain("scopeEntry");
+  });
+});
+
+describe("eslintPlugin factory batches", () => {
+  const definition = plugin({});
+
+  it("exposes lintBatch hook and a single BatchSpec", () => {
+    expect(definition.hooks?.lintBatch).toBeTypeOf("function");
+    expect(definition.batches).toBeDefined();
+    expect(definition.batches).toHaveLength(1);
+  });
+});
+
+function makeCmdNode(
+  service: string,
+  pluginName?: string,
+): PlanNode {
+  return {
+    id: `cmd:0:${service}:lint`,
+    handler: { kind: "builtin", name: "command:exec" },
+    needs: ["pre_command"],
+    target: service,
+    payload: {
+      commandName: "lint",
+      stageIndex: 0,
+      task: {
+        service,
+        command: "lint",
+        executable: "run",
+        ...(pluginName ? { plugin: pluginName } : {}),
+      },
+    },
+  };
+}
+
+describe("eslintPlugin BatchSpec.claims", () => {
+  const spec = plugin({}).batches![0]!;
+
+  it("claims command:exec nodes delegated to eslint", () => {
+    expect(spec.claims(makeCmdNode("web", "eslint"), {
+      services: {},
+      project: { plugins: [] } as never,
+      env: {},
+      args: {} as never,
+    })).toBe(true);
+    expect(isEslintCommandExecNode(makeCmdNode("web", "eslint"))).toBe(true);
+  });
+
+  it("does NOT claim shell command:exec or other plugins", () => {
+    const ctx = {
+      services: {},
+      project: { plugins: [] } as never,
+      env: {},
+      args: {} as never,
+    };
+    expect(spec.claims(makeCmdNode("web"), ctx)).toBe(false);
+    expect(spec.claims(makeCmdNode("web", "vitest"), ctx)).toBe(false);
+    expect(
+      spec.claims(
+        {
+          id: "pre_command",
+          handler: { kind: "builtin", name: "command:pre" },
+          needs: [],
+        },
+        ctx,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("eslintPlugin BatchSpec.coalesce", () => {
+  const spec: BatchSpec = plugin({}).batches![0]!;
+  const ctx = {
+    services: {},
+    project: { plugins: [] } as never,
+    env: {},
+    args: {} as never,
+  };
+
+  it("coalesces into eslint:batch with lintBatch handler", () => {
+    const claimed = [
+      makeCmdNode("a", "eslint"),
+      makeCmdNode("b", "eslint"),
+      makeCmdNode("c", "eslint"),
+    ];
+    const out = spec.coalesce(claimed, ctx);
+    expect(out.id).toBe("eslint:batch");
+    expect(out.handler).toEqual({
+      kind: "plugin-hook",
+      plugin: "eslint",
+      hook: "lintBatch",
+    });
+    expect(out.payload).toEqual({ targets: ["a", "b", "c"] });
+    expect(out.meta).toEqual({
+      batchOf: ["cmd:0:a:lint", "cmd:0:b:lint", "cmd:0:c:lint"],
+    });
+  });
+});
+
+describe("lintBatch hook execution", () => {
+  it("runs one coordinator for payload.targets", async () => {
+    const root = fixture();
+    install(root);
+    const a = service(root, "a", {});
+    config(a);
+    const b = service(root, "b", {});
+    config(b);
+    const { ctx, exec, stderr } = context(root, [a, b]);
+    exec.mockResolvedValue({ exitCode: 0, stdout: "[]", stderr: "" });
+    await plugin({}).hooks!.lintBatch!({
+      ...ctx,
+      payload: { targets: ["a", "b"] },
+    });
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec.mock.calls[0]![2].cwd).toBe(root);
+    const stderrText = stderr.mock.calls.map((call) => call[0]).join("");
+    expect(stderrText).toContain("[eslint] Targets: a, b");
   });
 });
