@@ -443,4 +443,30 @@ describe("lintBatch hook execution", () => {
     const stderrText = stderr.mock.calls.map((call) => call[0]).join("");
     expect(stderrText).toContain("[eslint] Targets: a, b");
   });
+
+  it("ignores plan flags on runner.argv (nopo check --skip-missing)", async () => {
+    // Regression: lintBatch used to leave argv unset, so executeEslint validated
+    // runner.argv (the top-level `nopo check … --skip-missing --no-fail-fast`
+    // argv) and threw Unknown nopo ESLint option '--skip-missing'.
+    const root = fixture();
+    install(root);
+    const a = service(root, "a", {});
+    config(a);
+    const { ctx, exec } = context(root, [a]);
+    exec.mockResolvedValue({ exitCode: 0, stdout: "[]", stderr: "" });
+    (ctx.runner as { argv?: string[] }).argv = [
+      "node",
+      "nopo",
+      "check",
+      "--skip-missing",
+      "--no-fail-fast",
+    ];
+    await expect(
+      plugin({}).hooks!.lintBatch!({
+        ...ctx,
+        payload: { targets: ["a"] },
+      }),
+    ).resolves.toBeUndefined();
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
 });
