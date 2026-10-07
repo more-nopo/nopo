@@ -56,6 +56,20 @@ path prefix; a non-zero exit reports which targets failed.
 reject them because nopo owns the meta-config. `--print` emits the resolved
 target/config mapping without loading configs or exposing environment values.
 
+
+## Plan batches (`nopo check:lint` / `nopo lint`)
+
+When targets declare `commands.*.plugin: eslint`, CommandScript would otherwise
+emit one `command:exec` node per target. This plugin registers a plan
+`batches` spec (same compaction contract as docker bake) that claims those
+nodes and coalesces them into a single `eslint:batch` → `lintBatch` hook, so
+`nopo check:lint --print` (and live runs) show **one** coordinator node instead
+of N shells.
+
+Opt-in remains the same: delegated `plugin: eslint` commands, `eslint.config.*`,
+or `plugins.eslint: {}`. Shell lint commands without `plugin: eslint` are not
+claimed and stay as ordinary `command:exec` nodes.
+
 ## Project plugin config
 
 ```yaml
