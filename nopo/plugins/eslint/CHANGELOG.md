@@ -1,5 +1,11 @@
 # @more-nopo/nopo-plugin-eslint
 
+## 0.2.0
+
+### Minor Changes
+
+- 2070f1c: Declare plan `batches` so `nopo check:lint` / `nopo lint` coalesce multi-target `plugin: eslint` command:exec nodes into one `eslint:batch` coordinator run (mirrors docker bake).
+
 ## 0.1.0
 
 ### Minor Changes
