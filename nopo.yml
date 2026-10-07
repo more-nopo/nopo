@@ -14,6 +14,8 @@ plugins:
     path: ./nopo/plugins/bun/src/index.ts
   - name: vitest
     path: ./nopo/plugins/vitest/src/index.ts
+  - name: eslint
+    path: ./nopo/plugins/eslint/src/index.ts
   - name: sonar
     path: ./nopo/plugins/sonar/src/index.ts
   - name: diff
