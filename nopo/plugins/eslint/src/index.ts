@@ -578,6 +578,10 @@ const eslintPlugin: NopoPluginFactory = (raw) => {
         await executeEslint(
           {
             ...context,
+            // Empty argv is truthy so executeEslint won't fall through to
+            // runner.argv (nopo check --skip-missing / --no-fail-fast, etc.).
+            // Targets and ESLint args already come from the batch payload.
+            argv: [],
             positionals: payload.targets,
             passthrough: payload.args ?? [],
             commandContext: undefined,
