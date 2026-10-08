@@ -13,6 +13,7 @@ jobs:
       contents: write
       pull-requests: write
       packages: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -25,9 +26,19 @@ jobs:
           scope: "@more-nopo"
       - run: bun install --frozen-lockfile
       - uses: changesets/action@v1
+        id: changesets
         with:
           publish: bunx changeset publish
           title: Version Packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # PRs opened/updated with GITHUB_TOKEN don't trigger pull_request workflows,
+      # so the required `ci` check never appears on the Version Packages PR.
+      # workflow_dispatch is the documented exception, and its `ci` check run lands
+      # on the release branch head SHA, satisfying the required status check.
+      - name: Run ci on Version Packages PR
+        if: steps.changesets.outputs.hasChangesets == 'true'
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref changeset-release/main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
