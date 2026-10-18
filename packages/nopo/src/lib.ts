@@ -1498,16 +1498,24 @@ export class Runner {
         repoRoot: runnerForScript.config.root,
       });
 
-      // Log cache stats if there were any hits
+      // Log cache stats if there were any hits or bypasses
       const cachedResult = result as import("./cache/plan-cache.ts").CachedPlanRunResult;
-      if (cachedResult.cacheHits > 0) {
+      if (cachedResult.cacheHits > 0 || cachedResult.bypasses > 0) {
         const total = cachedResult.cacheHits + cachedResult.cacheMisses;
-        this.logger.log(
-          chalk.cyan(
-            `[cache] ${cachedResult.cacheHits}/${total} steps skipped via cache` +
-              (cachedResult.verifications > 0 ? ` (${cachedResult.verifications} verified)` : ""),
-          ),
-        );
+        const parts: string[] = [];
+        if (cachedResult.cacheHits > 0) {
+          parts.push(`${cachedResult.cacheHits}/${total} steps skipped via cache`);
+        }
+        if (cachedResult.verifications > 0) {
+          parts.push(`${cachedResult.verifications} verified`);
+        }
+        if (cachedResult.bypasses > 0) {
+          parts.push(`${cachedResult.bypasses} bypassed (dirty)`);
+        }
+        if (!cachedResult.writeEnabled) {
+          parts.push("read-only");
+        }
+        this.logger.log(chalk.cyan(`[cache] ${parts.join(", ")}`));
       }
     } else {
       // Regular execution without caching

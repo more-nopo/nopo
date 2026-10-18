@@ -6,6 +6,21 @@
  * - Duration
  * - Run URL (CI link)
  * - Timestamp
+ *
+ * ## Design: Transport-Agnostic Seam
+ *
+ * This interface is intentionally minimal and transport-agnostic to serve as
+ * the integration point for a future hosted nopo server. Today it backs local
+ * and S3 caches; tomorrow the same interface can route to:
+ *
+ * - **Remote cache service**: Hosted nopo server stores results centrally
+ * - **Distributed workers**: Workers execute plan steps and report back through
+ *   the same get/put protocol, with GitHub status updates
+ *
+ * Keep implementations free of S3-specific types in the public interface.
+ * The store contract is: "given a key, return cached metadata or null;
+ * given an entry, persist it." Everything else (transport, auth, sharding)
+ * lives inside implementations.
  */
 
 import type { StepKey } from "./cache-key.ts";

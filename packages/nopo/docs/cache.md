@@ -54,6 +54,20 @@ export NOPO_CACHE=1
 NOPO_CACHE=1 nopo test
 ```
 
+### Cache Write Control
+
+By default, cache writes are **enabled only in CI environments** (when `CI=true`). This prevents local or agent runs from accidentally polluting the cache with unverified results.
+
+```bash
+# Explicitly enable writes (e.g., for local testing)
+NOPO_CACHE_WRITE=1 nopo test --cache
+
+# Disable writes (read-only mode)
+NOPO_CACHE_WRITE=0 nopo test --cache
+```
+
+In read-only mode, the cache still provides hits but won't record new passes. This is useful for laptops and agents that should benefit from CI-populated cache without writing to it.
+
 ## Store Configuration
 
 The cache supports two storage backends:
@@ -202,6 +216,21 @@ When verification sampling triggers:
 [cache] ⚡ cmd:0:api:test re-running for verification (key: abc123def456)
 ```
 
+## Dirty Working Tree Handling
+
+The cache uses `git ls-tree HEAD` to compute tree hashes, which reflects the **committed** state of files. If you have uncommitted changes in a target directory, its dependencies, or the lockfile, the cache is bypassed for affected steps (no read, no write). This prevents:
+
+- False cache hits from uncommitted changes that would affect execution
+- Polluting the cache with results that don't match the committed state
+
+When a step is bypassed due to dirty files, you'll see:
+
+```
+[cache] ○ cmd:0:api:test bypassed (uncommitted changes in: packages/api)
+```
+
+To get cache hits locally, commit your changes first.
+
 ## Known Limitations
 
 1. **Undeclared inputs**: Files or environment variables not captured in the key can cause false hits. Use sampling to detect.
@@ -244,3 +273,12 @@ The hierarchical key design enables future optimizations:
 - Skip entire plans when all step keys match
 - Cache at file granularity for incremental builds
 - Share cache across branches with common ancestors
+
+## Future: nopo Server Store
+
+The store interface (`ResultStore`) is designed as a transport-agnostic seam for a future hosted nopo server. Today it backs local and S3 caches; tomorrow the same interface can route to:
+
+- **Remote cache service**: A hosted nopo server stores results centrally, removing the need for teams to manage their own S3 buckets and credentials
+- **Distributed workers**: Workers execute plan steps and report back through the same get/put protocol, with GitHub status updates for in-progress steps
+
+The interface intentionally uses simple `get`/`put`/`has` semantics with opaque string keys and JSON-serializable entries. No S3-specific types leak through the interface, making it straightforward to add new backends (HTTP API, gRPC, etc.) without changing call sites.

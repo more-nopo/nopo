@@ -14,6 +14,7 @@
  * - Per-file key = future extension for file-level caching
  */
 
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -117,8 +118,6 @@ export function getGitTreeHash(
   relativePath: string,
   ref = "HEAD",
 ): string | null {
-  const { spawnSync } = require("node:child_process");
-
   // For empty path (repo root), get the tree of the commit
   if (!relativePath || relativePath === ".") {
     const result = spawnSync("git", ["rev-parse", `${ref}^{tree}`], {
@@ -285,4 +284,166 @@ export function getDeclaredEnvInputs(
   // TODO: Support service-level declaration of env inputs via nopo.yml
   // For now, return the default set
   return DEFAULT_ENV_INPUTS;
+}
+
+/**
+ * Check if any of the given paths have uncommitted or untracked changes.
+ * Uses `git status --porcelain` to detect dirty files.
+ *
+ * @param repoRoot - Root of the git repository
+ * @param relativePaths - Paths relative to repo root to check
+ * @returns Array of dirty paths (empty if all clean)
+ */
+export function getDirtyPaths(
+  repoRoot: string,
+  relativePaths: readonly string[],
+): string[] {
+  if (relativePaths.length === 0) return [];
+
+  // Run git status for all paths at once
+  const result = spawnSync(
+    "git",
+    ["status", "--porcelain", "--", ...relativePaths],
+    { cwd: repoRoot, encoding: "utf-8" },
+  );
+
+  if (result.status !== 0) {
+    // Git command failed - treat as dirty to be safe
+    return [...relativePaths];
+  }
+
+  // Don't trim the whole output - leading space in " M file.txt" is part of
+  // the porcelain format (X=index status, Y=working tree status)
+  const output = result.stdout;
+  if (!output.trim()) return [];
+
+  // Parse porcelain output: each line is "XY path" or "XY path -> newpath"
+  const dirtyPaths: string[] = [];
+  for (const line of output.split("\n")) {
+    // Trim trailing whitespace only, preserve leading space which is status
+    const trimmedLine = line.trimEnd();
+    if (!trimmedLine) continue;
+    // Skip the status prefix (2 chars + space)
+    const pathPart = trimmedLine.slice(3);
+    // Handle renames: "old -> new"
+    const arrowIdx = pathPart.indexOf(" -> ");
+    const filePath = arrowIdx >= 0 ? pathPart.slice(0, arrowIdx) : pathPart;
+    dirtyPaths.push(filePath);
+  }
+
+  return dirtyPaths;
+}
+
+/**
+ * Check if a specific path or any of its contents are dirty.
+ *
+ * @param repoRoot - Root of the git repository
+ * @param relativePath - Path relative to repo root (directory or file)
+ * @returns true if the path has uncommitted/untracked changes
+ */
+export function isPathDirty(repoRoot: string, relativePath: string): boolean {
+  if (!relativePath || relativePath === ".") {
+    // Check entire repo
+    const result = spawnSync(
+      "git",
+      ["status", "--porcelain"],
+      { cwd: repoRoot, encoding: "utf-8" },
+    );
+    return result.status !== 0 || !!result.stdout.trim();
+  }
+
+  const dirtyPaths = getDirtyPaths(repoRoot, [relativePath]);
+  if (dirtyPaths.length > 0) return true;
+
+  // Also check if there are dirty files UNDER this path (for directories)
+  const result = spawnSync(
+    "git",
+    ["status", "--porcelain", "--", `${relativePath}/`],
+    { cwd: repoRoot, encoding: "utf-8" },
+  );
+
+  return result.status !== 0 || !!result.stdout.trim();
+}
+
+/**
+ * Result of checking cache eligibility for a step.
+ */
+export interface CacheEligibility {
+  /** Whether the step is eligible for caching */
+  eligible: boolean;
+  /** Reason if not eligible */
+  reason?: string;
+  /** Dirty paths that caused ineligibility */
+  dirtyPaths?: string[];
+}
+
+/**
+ * Check if a step is eligible for caching based on working tree state.
+ * A step is ineligible if any of its input paths have uncommitted changes.
+ *
+ * @param project - Project configuration
+ * @param targetId - Target to check (or undefined for non-target steps)
+ * @param repoRoot - Repository root path
+ * @param lockfilePath - Path to lockfile (if applicable)
+ */
+export function checkCacheEligibility(
+  project: NormalizedProjectConfig,
+  targetId: string | undefined,
+  repoRoot: string,
+  lockfilePath?: string,
+): CacheEligibility {
+  const pathsToCheck: string[] = [];
+
+  // Add target directory
+  if (targetId) {
+    const service = project.services.entries[targetId];
+    if (service) {
+      const relativePath = path.relative(repoRoot, service.paths.root);
+      if (relativePath) pathsToCheck.push(relativePath);
+
+      // Add dependency directories
+      const allDeps = [
+        ...service.buildDeps,
+        ...service.runtimeDeps,
+        ...service.systemDeps,
+      ];
+      for (const depId of new Set(allDeps)) {
+        const depService = project.services.entries[depId];
+        if (depService) {
+          const depPath = path.relative(repoRoot, depService.paths.root);
+          if (depPath) pathsToCheck.push(depPath);
+        }
+      }
+    }
+  }
+
+  // Add lockfile
+  if (lockfilePath) {
+    const lockfileRelative = path.relative(repoRoot, lockfilePath);
+    if (lockfileRelative && !lockfileRelative.startsWith("..")) {
+      pathsToCheck.push(lockfileRelative);
+    }
+  }
+
+  if (pathsToCheck.length === 0) {
+    return { eligible: true };
+  }
+
+  // Check for dirty paths
+  const dirtyPaths: string[] = [];
+  for (const p of pathsToCheck) {
+    if (isPathDirty(repoRoot, p)) {
+      dirtyPaths.push(p);
+    }
+  }
+
+  if (dirtyPaths.length > 0) {
+    return {
+      eligible: false,
+      reason: `uncommitted changes in: ${dirtyPaths.join(", ")}`,
+      dirtyPaths,
+    };
+  }
+
+  return { eligible: true };
 }

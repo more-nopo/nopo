@@ -17,13 +17,17 @@
 
 export {
   buildStepKeyInputs,
+  checkCacheEligibility,
   collectTreeHashes,
   computePlanKey,
   computeStepKey,
   getDeclaredEnvInputs,
+  getDirtyPaths,
   getGitTreeHash,
   getRuntimeVersion,
   hashFileContent,
+  isPathDirty,
+  type CacheEligibility,
   type StepKey,
   type StepKeyInputs,
 } from "./cache-key.ts";
@@ -42,10 +46,13 @@ export {
 export { FilesystemStore } from "./stores/filesystem.ts";
 export { S3Store } from "./stores/s3.ts";
 
+import path from "node:path";
+
 import type { NormalizedProjectConfig } from "../config/index.ts";
-import type { Plan, PlanNode } from "../plan.ts";
+import type { PlanNode } from "../plan.ts";
 import {
   buildStepKeyInputs,
+  checkCacheEligibility,
   computeStepKey,
   getDeclaredEnvInputs,
   type StepKey,
@@ -64,6 +71,12 @@ import {
 export interface CacheConfig {
   /** Whether caching is enabled (default: false, opt-in) */
   enabled: boolean;
+  /**
+   * Whether cache writes are enabled.
+   * Default: true only in CI (when CI=true), false for local/agent runs.
+   * Override with NOPO_CACHE_WRITE=1 to enable writes locally.
+   */
+  writeEnabled: boolean;
   /** Store configuration */
   store: StoreConfig;
   /** TTL for cache entries in seconds */
@@ -96,6 +109,10 @@ export interface CacheLookupResult {
   entry?: CacheEntry;
   /** Whether this hit should be verified via sampling */
   shouldVerify: boolean;
+  /** Whether cache was bypassed due to dirty working tree */
+  bypassed: boolean;
+  /** Reason for bypass (e.g., "uncommitted changes in: api, shared") */
+  bypassReason?: string;
 }
 
 /**
@@ -106,6 +123,7 @@ export class StepCache {
   private readonly config: CacheConfig;
   private readonly context: CacheContext;
   private readonly stepKeys = new Map<string, StepKey>();
+  private readonly eligibilityCache = new Map<string, { eligible: boolean; reason?: string }>();
 
   private constructor(
     store: ResultStore,
@@ -141,12 +159,30 @@ export class StepCache {
     }
   }
 
+  /** Whether writes are enabled for this cache instance */
+  get writeEnabled(): boolean {
+    return this.config.writeEnabled;
+  }
+
   /**
    * Look up a cache entry for a plan node.
    * Only returns hits for passing results.
+   * Bypasses cache (no read, no write) for steps with dirty working trees.
    */
   async lookup(node: PlanNode): Promise<CacheLookupResult> {
     const stepKey = this.computeStepKey(node);
+
+    // Check if this step is eligible for caching (working tree clean)
+    const eligibility = this.checkEligibility(node);
+    if (!eligibility.eligible) {
+      return {
+        hit: false,
+        stepKey,
+        shouldVerify: false,
+        bypassed: true,
+        bypassReason: eligibility.reason,
+      };
+    }
 
     // Try to get cached entry
     const entry = await this.store.get(stepKey.key);
@@ -162,20 +198,32 @@ export class StepCache {
       stepKey,
       entry: entry ?? undefined,
       shouldVerify,
+      bypassed: false,
     };
   }
 
   /**
    * Record a step result in the cache.
    * Only passing results are stored.
+   * Skips recording if writes are disabled or working tree is dirty.
    */
   async record(
     stepKey: StepKey,
     passed: boolean,
     durationMs: number,
+    node?: PlanNode,
   ): Promise<void> {
     // Only cache passes
     if (!passed) return;
+
+    // Skip if writes are disabled
+    if (!this.config.writeEnabled) return;
+
+    // Skip if working tree is dirty for this node
+    if (node) {
+      const eligibility = this.checkEligibility(node);
+      if (!eligibility.eligible) return;
+    }
 
     const entry = createCacheEntry(
       stepKey,
@@ -206,6 +254,35 @@ export class StepCache {
    */
   getAllStepKeys(): ReadonlyMap<string, StepKey> {
     return this.stepKeys;
+  }
+
+  private checkEligibility(node: PlanNode): { eligible: boolean; reason?: string } {
+    // Return cached result if already computed
+    const cached = this.eligibilityCache.get(node.id);
+    if (cached) return cached;
+
+    // Get lockfile path for this node
+    let lockfilePath: string | undefined;
+    if (node.target) {
+      const service = this.context.project.services.entries[node.target];
+      if (service && service.packageManagers.length > 0) {
+        lockfilePath = service.packageManagers[0]!.lockfile;
+      }
+    }
+    if (!lockfilePath) {
+      lockfilePath = path.join(this.context.repoRoot, "bun.lock");
+    }
+
+    const eligibility = checkCacheEligibility(
+      this.context.project,
+      node.target,
+      this.context.repoRoot,
+      lockfilePath,
+    );
+
+    const result = { eligible: eligibility.eligible, reason: eligibility.reason };
+    this.eligibilityCache.set(node.id, result);
+    return result;
   }
 
   private computeStepKey(node: PlanNode): StepKey {
@@ -245,6 +322,7 @@ export class StepCache {
  *
  * Environment variables:
  * - NOPO_CACHE: "1" or "true" to enable caching
+ * - NOPO_CACHE_WRITE: "1" or "true" to enable cache writes (default: on in CI only)
  * - NOPO_CACHE_STORE: "filesystem" | "s3" (default: filesystem)
  * - NOPO_CACHE_TTL: TTL in seconds (default: 604800 = 7 days)
  * - NOPO_CACHE_SAMPLING: Verification sampling percentage (default: 0)
@@ -258,6 +336,13 @@ export function loadCacheConfig(
   const enabled =
     override?.enabled ??
     (env.NOPO_CACHE === "1" || env.NOPO_CACHE === "true");
+
+  // Write is enabled by default only in CI, or explicitly via NOPO_CACHE_WRITE=1
+  // This makes laptop/agent runs read-only by default
+  const isCI = env.CI === "true" || env.CI === "1";
+  const writeEnabled =
+    override?.writeEnabled ??
+    (env.NOPO_CACHE_WRITE === "1" || env.NOPO_CACHE_WRITE === "true" || isCI);
 
   const storeConfig = override?.store ?? storeConfigFromEnv(env);
 
@@ -278,6 +363,7 @@ export function loadCacheConfig(
 
   return {
     enabled,
+    writeEnabled,
     store: storeConfig,
     ttlSeconds,
     samplingPercent,
@@ -312,4 +398,11 @@ export function formatCacheHitMessage(
 export function formatVerifyMessage(nodeId: string, stepKey: StepKey): string {
   const keyShort = stepKey.key.slice(0, 12);
   return `[cache] ⚡ ${nodeId} re-running for verification (key: ${keyShort})`;
+}
+
+/**
+ * Format a cache bypass message (when working tree is dirty).
+ */
+export function formatBypassMessage(nodeId: string, reason: string): string {
+  return `[cache] ⊘ ${nodeId} bypassed (${reason})`;
 }

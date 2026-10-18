@@ -22,6 +22,7 @@ import {
 import {
   type CacheConfig,
   type CacheContext,
+  formatBypassMessage,
   formatCacheHitMessage,
   formatVerifyMessage,
   loadCacheConfig,
@@ -47,6 +48,10 @@ export interface CachedPlanRunResult extends PlanRunResult {
   cacheMisses: number;
   /** Number of steps re-run for verification */
   verifications: number;
+  /** Number of steps bypassed due to dirty working tree */
+  bypasses: number;
+  /** Whether writes are enabled */
+  writeEnabled: boolean;
   /** Step keys computed during execution */
   stepKeys: ReadonlyMap<string, StepKey>;
 }
@@ -86,6 +91,8 @@ export async function executePlanWithCache(
       cacheHits: 0,
       cacheMisses: plan.nodes.size,
       verifications: 0,
+      bypasses: 0,
+      writeEnabled: false,
       stepKeys: new Map(),
     };
   }
@@ -94,10 +101,13 @@ export async function executePlanWithCache(
   let cacheHits = 0;
   let cacheMisses = 0;
   let verifications = 0;
+  let bypasses = 0;
 
   // Track which nodes to skip (cache hits)
   const skipNodes = new Set<string>();
   const skippedResults = new Map<string, NodeResult>();
+  // Track bypassed nodes (dirty working tree) - these should not be recorded
+  const bypassedNodes = new Set<string>();
 
   // Pre-compute cache lookups for all nodes
   const lookupPromises = new Map<string, ReturnType<typeof stepCache.lookup>>();
@@ -111,7 +121,15 @@ export async function executePlanWithCache(
       const result = await lookupPromise;
       const node = plan.nodes.get(nodeId)!;
 
-      if (result.hit && result.entry) {
+      if (result.bypassed) {
+        // Dirty working tree - bypass cache (no read, no write)
+        bypasses++;
+        cacheMisses++;
+        bypassedNodes.add(nodeId);
+        ctx.io.stdout.write(
+          formatBypassMessage(nodeId, result.bypassReason ?? "dirty working tree") + "\n",
+        );
+      } else if (result.hit && result.entry) {
         // Cache hit - mark for skipping
         skipNodes.add(nodeId);
         cacheHits++;
@@ -163,12 +181,15 @@ export async function executePlanWithCache(
       const node = plan.nodes.get(event.nodeId);
       if (!node) return;
 
+      // Skip recording for bypassed nodes (dirty working tree)
+      if (bypassedNodes.has(event.nodeId)) return;
+
       const stepKey = stepCache.getStepKey(node);
       const passed = event.type === "node-success";
       const durationMs = event.durationMs;
 
-      // Record result to cache asynchronously
-      stepCache.record(stepKey, passed, durationMs).catch((err) => {
+      // Record result to cache asynchronously (pass node for eligibility check)
+      stepCache.record(stepKey, passed, durationMs, node).catch((err) => {
         console.warn(`[cache] Failed to record ${event.nodeId}:`, err);
       });
     }
@@ -192,6 +213,8 @@ export async function executePlanWithCache(
     cacheHits,
     cacheMisses,
     verifications,
+    bypasses,
+    writeEnabled: stepCache.writeEnabled,
     stepKeys: stepCache.getAllStepKeys(),
   };
 }
