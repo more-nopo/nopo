@@ -113,7 +113,7 @@
     },
     "nopo/plugins/eslint": {
       "name": "@more-nopo/nopo-plugin-eslint",
-      "version": "0.0.1",
+      "version": "0.2.2",
       "dependencies": {
         "@more-nopo/nopo": "^0.3.0",
         "zod": "^3.24.2",

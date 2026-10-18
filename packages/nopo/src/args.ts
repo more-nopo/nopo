@@ -72,4 +72,29 @@ export const baseArgs = new ScriptArgs({
       "the per-node tail (the summary line still prints).",
     default: 30,
   },
+
+  cache: {
+    type: "boolean",
+    description:
+      "Enable step-level result caching. When a step's inputs (target tree, " +
+      "lockfile, command, env) match a previous pass, skip re-execution. " +
+      "Also settable via NOPO_CACHE=1 environment variable.",
+    default: false,
+  },
+
+  "no-cache": {
+    type: "boolean",
+    description:
+      "Force full execution even if cache is enabled. Disables all cache " +
+      "lookups for this invocation; results are still recorded.",
+    default: false,
+  },
+
+  "cache-sampling": {
+    type: "number",
+    description:
+      "Percentage of cache hits to re-execute for verification (0-100). " +
+      "Detects false cache hits from undeclared inputs. Default: 0 (disabled).",
+    default: 0,
+  },
 });
