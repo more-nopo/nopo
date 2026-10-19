@@ -18,6 +18,7 @@ When enabled, the cache:
 A step's cache key is a SHA-256 hash of:
 
 - **Target tree hashes**: Git tree hash of the target and all its dependencies (transitive)
+- **Workspace package hashes**: Git tree hash of every workspace package the target's `package.json` depends on (transitively), found by resolving `node_modules/<name>` to a directory inside the repo. nopo.yml deps do not need to list them.
 - **Root config hashes**: SHA-256 of root-level config files (tsconfig*.json, eslint.config.*, .nvmrc, etc.)
 - **Lockfile hashes**: SHA-256 of all lockfiles (bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml)
 - **Plugin source hashes**: For plugin hooks, SHA-256 of the plugin's source file (path-referenced plugins; package plugins are covered by the lockfile hash)
@@ -216,6 +217,8 @@ cache:
 ```
 
 **Warning**: Undeclared inputs can cause false cache hits. Use `--cache-sampling` to detect these.
+
+**Imports outside the target**: relative imports or scripts outside the target directory (for example `../../scripts/tool.ts`) are not in the key unless they belong to a declared workspace package. List them in `cache.inputs`. Input globs skip `node_modules`, since the lockfile hash covers installed packages.
 
 **Important**: Files matched by `.gitignore` are not tracked by git tree hashes. If your step depends on gitignored files, you must declare them in `cache.inputs` for the cache to work correctly.
 

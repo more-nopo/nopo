@@ -236,7 +236,14 @@ export function collectDeclaredInputHashes(
   for (const { root, pattern } of inputs) {
     let matches: string[];
     try {
-      matches = glob.sync(pattern, { cwd: root, nodir: true, absolute: false, dot: true });
+      matches = glob.sync(pattern, {
+        cwd: root,
+        nodir: true,
+        absolute: false,
+        dot: true,
+        // Installed deps are covered by the lockfile hashes
+        ignore: ["**/node_modules/**"],
+      });
     } catch {
       return null;
     }
@@ -616,6 +623,15 @@ export function collectTreeHashes(
 
   hashes[targetId] = treeHash;
 
+  // Workspace packages this target depends on through package.json (bun/npm/yarn/pnpm
+  // workspaces link them into node_modules). nopo.yml deps rarely list them, but a change
+  // to one can break this target's typecheck, lint, or tests.
+  for (const dir of collectWorkspaceDepDirs(repoRoot, service.paths.root, treeHashCache)) {
+    const wsHash = getGitTreeHash(repoRoot, dir, "HEAD", treeHashCache);
+    if (wsHash === null) return null;
+    hashes[`workspace:${dir}`] = wsHash;
+  }
+
   // Recursively collect for dependencies (transitive)
   const allDeps = [
     ...service.buildDeps,
@@ -631,6 +647,80 @@ export function collectTreeHashes(
   }
 
   return hashes;
+}
+
+const PACKAGE_DEP_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+] as const;
+
+const workspaceDepMemo = new WeakMap<TreeHashCache, Map<string, string[]>>();
+
+/** Workspace package directories (repo-relative) that `dir`'s package.json depends on,
+ * transitively. A dependency counts as a workspace package when `node_modules/<name>`
+ * (next to `dir`, or at the repo root) resolves to a directory inside the repo that is not
+ * itself under node_modules. Returns [] when `dir` has no package.json.
+ */
+export function collectWorkspaceDepDirs(
+  repoRoot: string,
+  dir: string,
+  memoKey?: TreeHashCache,
+): string[] {
+  let memo = memoKey ? workspaceDepMemo.get(memoKey) : undefined;
+  if (memoKey && !memo) {
+    memo = new Map();
+    workspaceDepMemo.set(memoKey, memo);
+  }
+  const cached = memo?.get(dir);
+  if (cached) return cached;
+
+  const result: string[] = [];
+  const seen = new Set<string>([path.relative(repoRoot, dir)]);
+  const queue = [dir];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const rel of directWorkspaceDeps(repoRoot, current)) {
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      result.push(rel);
+      queue.push(path.join(repoRoot, rel));
+    }
+  }
+  result.sort();
+  memo?.set(dir, result);
+  return result;
+}
+
+function directWorkspaceDeps(repoRoot: string, dir: string): string[] {
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
+  } catch {
+    return [];
+  }
+  const names = new Set<string>();
+  for (const field of PACKAGE_DEP_FIELDS) {
+    const deps = pkg[field];
+    if (isRecord(deps)) for (const name of Object.keys(deps)) names.add(name);
+  }
+  const out: string[] = [];
+  for (const name of names) {
+    for (const base of [dir, repoRoot]) {
+      let real: string;
+      try {
+        real = fs.realpathSync(path.join(base, "node_modules", name));
+      } catch {
+        continue;
+      }
+      const rel = path.relative(repoRoot, real);
+      const inRepo = rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+      if (inRepo && !rel.split(path.sep).includes("node_modules")) out.push(rel);
+      break;
+    }
+  }
+  return out;
 }
 
 /**
@@ -1138,6 +1228,9 @@ export function collectPathsForDirtyCheck(
     } else if (relativePath && !relativePath.startsWith("..")) {
       pathsToCheck.push(relativePath);
     }
+
+    // Workspace packages feed the key, so they must be clean too
+    pathsToCheck.push(...collectWorkspaceDepDirs(repoRoot, service.paths.root));
 
     // Add all transitive dependencies
     const allDeps = [

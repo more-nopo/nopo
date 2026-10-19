@@ -58,9 +58,18 @@ export class S3Store implements ResultStore {
     }
 
     try {
-      // Try a HEAD request on the bucket with timeout
-      const response = await this.s3Request("HEAD", "", {}, REQUEST_TIMEOUT_MS);
-      return response.ok || response.status === 404; // 404 is ok for HEAD on non-existent key
+      // HEAD a probe object rather than the bucket: bucket-scoped object tokens (R2
+      // "Bucket Item Read/Write") may not be allowed HeadBucket, but can HeadObject.
+      // 404 = authorized and absent; 401/403 = credentials cannot read the bucket.
+      const response = await this.s3Request(
+        "HEAD",
+        `${this.prefix}/__nopo_probe__.json`,
+        {},
+        REQUEST_TIMEOUT_MS,
+      );
+      if (response.ok || response.status === 404) return true;
+      console.warn(`[cache] S3 store probe returned HTTP ${response.status}; caching disabled`);
+      return false;
     } catch {
       return false;
     }
