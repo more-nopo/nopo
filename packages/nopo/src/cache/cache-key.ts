@@ -4,11 +4,13 @@
  * A step key is a content-addressable hash combining:
  * - Target's git tree hash and its dependency targets' tree hashes (transitive)
  * - Root-level config files (tsconfig*, eslint.config.*, .nvmrc, etc.)
- * - Lockfile content hash (all lockfiles, not just first)
+ * - Lockfile content hashes (all lockfiles)
+ * - Plugin source hashes (for plugin hooks)
  * - Toolchain/runtime version (node/bun version)
  * - nopo package version
  * - Step's command and arguments
- * - Declared environment variable inputs
+ * - Declared environment variable inputs (default + service-declared cache.env)
+ * - Extra input file hashes (service-declared cache.inputs)
  *
  * The design is hierarchical to enable future granularity:
  * - Plan key = hash of all step keys
@@ -17,14 +19,21 @@
  *
  * IMPORTANT: Only side-effect-free checks are cacheable (lint/test/typecheck).
  * Side-effectful operations (install, build, up/down, etc.) must never be cached.
+ *
+ * IMPORTANT: Container-context steps (--context container) are never cached
+ * because they execute in a different environment.
+ *
+ * IMPORTANT: If any input path cannot be hashed (git unavailable, gitignored),
+ * the step is not cacheable. Gitignored inputs must be declared via cache.inputs.
  */
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { glob } from "glob";
 
-import type { NormalizedProjectConfig, NormalizedService } from "../config/index.ts";
+import type { NormalizedProjectConfig, NormalizedService, LoadedPlugin } from "../config/index.ts";
 import type { PlanNode } from "../plan.ts";
 
 // Root-level config files that affect all targets and should be included in cache keys
@@ -66,6 +75,14 @@ const CACHEABLE_PLUGIN_HOOKS: ReadonlySet<string> = new Set([
   "typecheckBatch",
 ]);
 
+/** Cache configuration declared in service nopo.yml */
+export interface ServiceCacheConfig {
+  /** Additional environment variable names that affect this service's cache key */
+  env?: string[];
+  /** Extra input file globs relative to service root (gitignored files must be declared here) */
+  inputs?: string[];
+}
+
 /** Inputs that contribute to a step's cache key */
 export interface StepKeyInputs {
   /** Target ID (service/package name) */
@@ -82,6 +99,8 @@ export interface StepKeyInputs {
   rootConfigHashes?: Record<string, string>;
   /** Lockfile content hashes (all lockfiles) */
   lockfileHashes?: Record<string, string>;
+  /** Plugin source hashes (for plugin hooks) */
+  pluginHashes?: Record<string, string>;
   /** @deprecated Use lockfileHashes instead */
   lockfileHash?: string;
   /** Runtime/toolchain version (e.g., node version, bun version) */
@@ -106,8 +125,19 @@ export interface CacheableCheck {
  * Check if a plan node's handler is cacheable.
  * Only side-effect-free checks (lint, test, typecheck) are cacheable.
  * Side-effectful operations (install, build, up/down, etc.) are never cached.
+ * Container-context steps (--context container) are never cached.
  */
 export function isHandlerCacheable(node: PlanNode): CacheableCheck {
+  // Check for container context override - never cache container steps
+  // Container steps execute via kubectl exec in a different environment
+  const payload = node.payload as { contextOverride?: string } | undefined;
+  if (payload?.contextOverride === "container") {
+    return {
+      cacheable: false,
+      reason: "container context steps cannot be cached",
+    };
+  }
+
   if (node.handler.kind === "builtin") {
     const handlerKey = `builtin:${node.handler.name}`;
     if (CACHEABLE_HANDLERS.has(handlerKey)) {
@@ -142,8 +172,8 @@ export interface StepKey {
   inputs: StepKeyInputs;
 }
 
-// Bumped to v2: added rootConfigHashes, lockfileHashes (plural), nopoVersion
-const KEY_VERSION = "v2";
+// Bumped to v3: added pluginHashes, cache.env/cache.inputs support
+const KEY_VERSION = "v3";
 
 /**
  * Compute a stable cache key for a plan step.
@@ -168,6 +198,7 @@ export function computeStepKey(inputs: StepKeyInputs): StepKey {
     lockfiles: inputs.lockfileHashes
       ? sortObjectSafe(inputs.lockfileHashes)
       : (inputs.lockfileHash ? { default: inputs.lockfileHash } : null),
+    plugins: sortObjectSafe(inputs.pluginHashes),
     runtime: inputs.runtimeVersion,
     nopo: inputs.nopoVersion ?? null,
     env: sortObjectSafe(inputs.envInputs),
@@ -231,40 +262,61 @@ function sortObjectSafe<T>(obj: Record<string, T> | undefined | null): Record<st
 }
 
 /**
+ * Per-run memoization cache for tree hashes.
+ * Key: `${repoRoot}:${ref}:${relativePath}`
+ */
+export type TreeHashCache = Map<string, string | null>;
+
+/**
  * Get git tree hash for a path without requiring a full checkout.
  * Uses `git ls-tree` which works on the index/refs.
  *
  * @param repoRoot - Root of the git repository
  * @param relativePath - Path relative to repo root (empty string for root)
  * @param ref - Git ref to use (defaults to HEAD)
+ * @param cache - Optional per-run memoization cache
  */
 export function getGitTreeHash(
   repoRoot: string,
   relativePath: string,
   ref = "HEAD",
+  cache?: TreeHashCache,
 ): string | null {
+  // Check cache first
+  const cacheKey = `${repoRoot}:${ref}:${relativePath || "."}`;
+  if (cache?.has(cacheKey)) {
+    return cache.get(cacheKey)!;
+  }
+
+  let treeHash: string | null = null;
+
   // For empty path (repo root), get the tree of the commit
   if (!relativePath || relativePath === ".") {
     const result = spawnSync("git", ["rev-parse", `${ref}^{tree}`], {
       cwd: repoRoot,
       encoding: "utf-8",
     });
-    if (result.status !== 0) return null;
-    return result.stdout.trim();
+    if (result.status === 0) {
+      treeHash = result.stdout.trim();
+    }
+  } else {
+    // For a specific path, use ls-tree
+    const result = spawnSync(
+      "git",
+      ["ls-tree", ref, "--", relativePath],
+      { cwd: repoRoot, encoding: "utf-8" },
+    );
+
+    if (result.status === 0 && result.stdout.trim()) {
+      // Output format: "<mode> <type> <hash>\t<path>"
+      const match = result.stdout.match(/^\S+\s+\S+\s+(\S+)/);
+      treeHash = match?.[1] ?? null;
+    }
   }
 
-  // For a specific path, use ls-tree
-  const result = spawnSync(
-    "git",
-    ["ls-tree", ref, "--", relativePath],
-    { cwd: repoRoot, encoding: "utf-8" },
-  );
-
-  if (result.status !== 0 || !result.stdout.trim()) return null;
-
-  // Output format: "<mode> <type> <hash>\t<path>"
-  const match = result.stdout.match(/^\S+\s+\S+\s+(\S+)/);
-  return match?.[1] ?? null;
+  // Store in cache
+  cache?.set(cacheKey, treeHash);
+  return treeHash;
 }
 
 /**
@@ -274,6 +326,7 @@ export function getGitTreeHash(
  * @param targetId - Target to collect hashes for
  * @param repoRoot - Repository root path
  * @param visited - Set of already-visited targets (for cycle detection)
+ * @param treeHashCache - Optional per-run memoization cache for tree hashes
  * @returns Record of target ID -> tree hash, or null if any hash is missing (git unavailable)
  */
 export function collectTreeHashes(
@@ -281,6 +334,7 @@ export function collectTreeHashes(
   targetId: string,
   repoRoot: string,
   visited = new Set<string>(),
+  treeHashCache?: TreeHashCache,
 ): Record<string, string> | null {
   const hashes: Record<string, string> = {};
 
@@ -292,7 +346,7 @@ export function collectTreeHashes(
 
   // Get tree hash for this target's directory
   const relativePath = path.relative(repoRoot, service.paths.root);
-  const treeHash = getGitTreeHash(repoRoot, relativePath);
+  const treeHash = getGitTreeHash(repoRoot, relativePath, "HEAD", treeHashCache);
 
   // If tree hash is null, git is unavailable or path doesn't exist - don't cache
   if (treeHash === null) {
@@ -308,7 +362,7 @@ export function collectTreeHashes(
     ...service.systemDeps,
   ];
   for (const dep of new Set(allDeps)) {
-    const depHashes = collectTreeHashes(project, dep, repoRoot, visited);
+    const depHashes = collectTreeHashes(project, dep, repoRoot, visited, treeHashCache);
     if (depHashes === null) {
       return null; // Propagate null if any dep hash is missing
     }
@@ -321,17 +375,23 @@ export function collectTreeHashes(
 /**
  * Collect tree hashes for multiple targets (used for batch nodes).
  * Returns null if any target's hash is missing.
+ *
+ * @param project - Project configuration
+ * @param targetIds - Target IDs to collect hashes for
+ * @param repoRoot - Repository root path
+ * @param treeHashCache - Optional per-run memoization cache for tree hashes
  */
 export function collectTreeHashesForTargets(
   project: NormalizedProjectConfig,
   targetIds: readonly string[],
   repoRoot: string,
+  treeHashCache?: TreeHashCache,
 ): Record<string, string> | null {
   const hashes: Record<string, string> = {};
   const visited = new Set<string>();
 
   for (const targetId of targetIds) {
-    const targetHashes = collectTreeHashes(project, targetId, repoRoot, visited);
+    const targetHashes = collectTreeHashes(project, targetId, repoRoot, visited, treeHashCache);
     if (targetHashes === null) {
       return null;
     }
@@ -453,6 +513,7 @@ export interface BuildStepKeyResult {
  * @param repoRoot - Repository root path
  * @param declaredEnvInputs - Environment variable names that affect this step
  * @param env - Current environment variables
+ * @param treeHashCache - Optional per-run memoization cache for tree hashes
  */
 export function buildStepKeyInputs(
   node: PlanNode,
@@ -460,8 +521,9 @@ export function buildStepKeyInputs(
   repoRoot: string,
   declaredEnvInputs: readonly string[],
   env: Record<string, string | undefined>,
+  treeHashCache?: TreeHashCache,
 ): BuildStepKeyResult {
-  // Check if handler is cacheable (side-effect-free)
+  // Check if handler is cacheable (side-effect-free, not container context)
   const cacheableCheck = isHandlerCacheable(node);
   if (!cacheableCheck.cacheable) {
     return { inputs: null, reason: cacheableCheck.reason };
@@ -469,14 +531,17 @@ export function buildStepKeyInputs(
 
   // Compute command string from handler
   let command: string;
+  let pluginName: string | undefined;
   if (node.handler.kind === "plugin-hook") {
     command = `plugin:${node.handler.plugin}:${node.handler.hook}`;
+    pluginName = node.handler.plugin;
   } else {
     command = `builtin:${node.handler.name}`;
   }
 
   // Collect tree hashes for target and dependencies (or claimed targets for batch nodes)
   let treeHashes: Record<string, string> | null;
+  let service: NormalizedService | undefined;
 
   // Check if this is a batch node with claimed targets
   const payload = node.payload as { targets?: string[] } | undefined;
@@ -484,10 +549,13 @@ export function buildStepKeyInputs(
 
   if (claimedTargets && claimedTargets.length > 0) {
     // Batch node: collect tree hashes for all claimed targets
-    treeHashes = collectTreeHashesForTargets(project, claimedTargets, repoRoot);
+    treeHashes = collectTreeHashesForTargets(project, claimedTargets, repoRoot, treeHashCache);
+    // For batch nodes, use the first claimed target's service for cache config
+    service = project.services.entries[claimedTargets[0]!];
   } else if (node.target) {
     // Regular node with a target
-    treeHashes = collectTreeHashes(project, node.target, repoRoot);
+    treeHashes = collectTreeHashes(project, node.target, repoRoot, new Set(), treeHashCache);
+    service = project.services.entries[node.target];
   } else {
     // No target and no claimed targets - can't compute meaningful key
     return { inputs: null, reason: "no target or claimed targets" };
@@ -495,7 +563,7 @@ export function buildStepKeyInputs(
 
   // If tree hashes are null, git is unavailable - don't cache
   if (treeHashes === null) {
-    return { inputs: null, reason: "git tree hash unavailable" };
+    return { inputs: null, reason: "git tree hash unavailable for target or dependency" };
   }
 
   // Don't cache if no tree hashes (empty object means nothing to cache against)
@@ -511,7 +579,18 @@ export function buildStepKeyInputs(
   // Collect all lockfile hashes
   const lockfileHashes = collectLockfileHashes(repoRoot);
 
-  // Collect declared env inputs
+  // Collect plugin source hashes for plugin hooks
+  const pluginHashes = pluginName
+    ? collectPluginHashes(project.plugins, pluginName)
+    : {};
+
+  // Collect extra input hashes from service cache.inputs config
+  const extraInputHashes = collectExtraInputHashes(service, repoRoot);
+  if (extraInputHashes === null) {
+    return { inputs: null, reason: "extra input file hash unavailable (gitignored inputs must exist)" };
+  }
+
+  // Collect declared env inputs (default + service-declared cache.env)
   const envInputs: Record<string, string> = {};
   for (const name of declaredEnvInputs) {
     const value = env[name];
@@ -529,16 +608,18 @@ export function buildStepKeyInputs(
       treeHashes,
       rootConfigHashes,
       lockfileHashes,
+      pluginHashes: Object.keys(pluginHashes).length > 0 ? pluginHashes : undefined,
       runtimeVersion: getRuntimeVersion(),
       nopoVersion: getNopoVersion(),
       envInputs,
+      extraInputHashes: Object.keys(extraInputHashes).length > 0 ? extraInputHashes : undefined,
     },
   };
 }
 
 /**
  * Extract the list of environment variables declared as cache inputs
- * for a service. Services can declare these in their nopo.yml.
+ * for a service. Includes default vars plus service-declared cache.env.
  *
  * Default always-included env vars that affect execution:
  * - CI (affects some behaviors)
@@ -546,17 +627,114 @@ export function buildStepKeyInputs(
  */
 const DEFAULT_ENV_INPUTS = ["CI", "NODE_ENV"];
 
+/**
+ * Get service-level cache configuration from pluginData or direct cache field.
+ * Services can declare cache.env and cache.inputs in their nopo.yml.
+ */
+export function getServiceCacheConfig(
+  service: NormalizedService | undefined,
+): ServiceCacheConfig | undefined {
+  if (!service) return undefined;
+  // Check for cache config in service (could be under pluginData.cache or direct)
+  const cacheConfig = (service as { cache?: ServiceCacheConfig }).cache ??
+    (service.pluginData?.cache as ServiceCacheConfig | undefined);
+  return cacheConfig;
+}
+
 export function getDeclaredEnvInputs(
   service: NormalizedService | undefined,
 ): readonly string[] {
-  // TODO: Support service-level declaration of env inputs via nopo.yml
-  // For now, return the default set
-  return DEFAULT_ENV_INPUTS;
+  const serviceConfig = getServiceCacheConfig(service);
+  const serviceEnvInputs = serviceConfig?.env ?? [];
+  // Combine default + service-declared, deduplicated
+  return [...new Set([...DEFAULT_ENV_INPUTS, ...serviceEnvInputs])];
+}
+
+/**
+ * Collect hashes for extra input files declared in service cache.inputs.
+ * These are globs relative to the service root.
+ * Returns null if any declared input file is missing (gitignored files must exist).
+ */
+export function collectExtraInputHashes(
+  service: NormalizedService | undefined,
+  repoRoot: string,
+): Record<string, string> | null {
+  const serviceConfig = getServiceCacheConfig(service);
+  if (!serviceConfig?.inputs || serviceConfig.inputs.length === 0) {
+    return {};
+  }
+
+  const hashes: Record<string, string> = {};
+  const serviceRoot = service?.paths.root ?? repoRoot;
+
+  for (const pattern of serviceConfig.inputs) {
+    try {
+      // Resolve glob pattern relative to service root
+      const matches = glob.sync(pattern, {
+        cwd: serviceRoot,
+        nodir: true,
+        absolute: false,
+      });
+
+      if (matches.length === 0) {
+        // Pattern matched nothing - could be gitignored file that doesn't exist
+        // This is a configuration error
+        console.warn(`[cache] Extra input pattern "${pattern}" matched no files in ${serviceRoot}`);
+      }
+
+      for (const match of matches) {
+        const filePath = path.join(serviceRoot, match);
+        const hash = hashFileContent(filePath);
+        if (hash === null) {
+          // File exists but couldn't be read, or doesn't exist
+          return null;
+        }
+        // Use relative path from repo root as key
+        const relPath = path.relative(repoRoot, filePath);
+        hashes[relPath] = hash;
+      }
+    } catch {
+      // Glob failed - treat as uncacheable
+      return null;
+    }
+  }
+
+  return hashes;
+}
+
+/**
+ * Collect hashes for plugin source files.
+ * For plugin hooks, includes the plugin's source file hash to invalidate
+ * cache when plugin code changes.
+ */
+export function collectPluginHashes(
+  plugins: LoadedPlugin[],
+  pluginName?: string,
+): Record<string, string> {
+  const hashes: Record<string, string> = {};
+
+  // If a specific plugin is requested, only hash that one
+  const pluginsToHash = pluginName
+    ? plugins.filter(p => p.definition.name === pluginName)
+    : plugins;
+
+  for (const plugin of pluginsToHash) {
+    // Hash the plugin's source file if available
+    const sourcePath = plugin.definition.sourcePath;
+    if (sourcePath) {
+      const hash = hashFileContent(sourcePath);
+      if (hash) {
+        hashes[plugin.definition.name] = hash;
+      }
+    }
+  }
+
+  return hashes;
 }
 
 /**
  * Check if any of the given paths have uncommitted or untracked changes.
- * Uses `git status --porcelain` to detect dirty files.
+ * Uses `git status --porcelain -z` for reliable NUL-separated parsing.
  *
  * @param repoRoot - Root of the git repository
  * @param relativePaths - Paths relative to repo root to check
@@ -568,10 +746,10 @@ export function getDirtyPaths(
 ): string[] {
   if (relativePaths.length === 0) return [];
 
-  // Run git status for all paths at once
+  // Run git status with -z for NUL-separated output (more reliable parsing)
   const result = spawnSync(
     "git",
-    ["status", "--porcelain", "--", ...relativePaths],
+    ["status", "--porcelain", "-z", "--", ...relativePaths],
     { cwd: repoRoot, encoding: "utf-8" },
   );
 
@@ -580,23 +758,38 @@ export function getDirtyPaths(
     return [...relativePaths];
   }
 
-  // Don't trim the whole output - leading space in " M file.txt" is part of
-  // the porcelain format (X=index status, Y=working tree status)
   const output = result.stdout;
-  if (!output.trim()) return [];
+  if (!output) return [];
 
-  // Parse porcelain output: each line is "XY path" or "XY path -> newpath"
+  // Parse NUL-separated porcelain output
+  // Format: "XY path\0" or "XY oldpath\0newpath\0" for renames
   const dirtyPaths: string[] = [];
-  for (const line of output.split("\n")) {
-    // Trim trailing whitespace only, preserve leading space which is status
-    const trimmedLine = line.trimEnd();
-    if (!trimmedLine) continue;
+  const parts = output.split("\0");
+
+  let i = 0;
+  while (i < parts.length) {
+    const part = parts[i];
+    if (!part) {
+      i++;
+      continue;
+    }
+
     // Skip the status prefix (2 chars + space)
-    const pathPart = trimmedLine.slice(3);
-    // Handle renames: "old -> new"
-    const arrowIdx = pathPart.indexOf(" -> ");
-    const filePath = arrowIdx >= 0 ? pathPart.slice(0, arrowIdx) : pathPart;
-    dirtyPaths.push(filePath);
+    const pathPart = part.slice(3);
+
+    // Check if this is a rename (status starts with R)
+    if (part.startsWith("R")) {
+      // For renames, the next part is the new name
+      dirtyPaths.push(pathPart);
+      if (i + 1 < parts.length && parts[i + 1]) {
+        dirtyPaths.push(parts[i + 1]!);
+        i++;
+      }
+    } else if (pathPart) {
+      dirtyPaths.push(pathPart);
+    }
+
+    i++;
   }
 
   return dirtyPaths;
@@ -614,10 +807,10 @@ export function isPathDirty(repoRoot: string, relativePath: string): boolean {
     // Check entire repo
     const result = spawnSync(
       "git",
-      ["status", "--porcelain"],
+      ["status", "--porcelain", "-z"],
       { cwd: repoRoot, encoding: "utf-8" },
     );
-    return result.status !== 0 || !!result.stdout.trim();
+    return result.status !== 0 || !!result.stdout;
   }
 
   const dirtyPaths = getDirtyPaths(repoRoot, [relativePath]);
@@ -626,11 +819,11 @@ export function isPathDirty(repoRoot: string, relativePath: string): boolean {
   // Also check if there are dirty files UNDER this path (for directories)
   const result = spawnSync(
     "git",
-    ["status", "--porcelain", "--", `${relativePath}/`],
+    ["status", "--porcelain", "-z", "--", `${relativePath}/`],
     { cwd: repoRoot, encoding: "utf-8" },
   );
 
-  return result.status !== 0 || !!result.stdout.trim();
+  return result.status !== 0 || !!result.stdout;
 }
 
 /**
@@ -765,4 +958,43 @@ export function checkCacheEligibility(
   }
 
   return { eligible: true };
+}
+
+/**
+ * HMAC signing for cache entries.
+ *
+ * When NOPO_CACHE_SIGNING_KEY is set:
+ * - Entries are signed on write
+ * - Unsigned or invalid entries are rejected on read
+ *
+ * This prevents cache poisoning from untrusted writers.
+ * Recommendation: Only give write credentials to trusted CI events (push:main, merge_group).
+ * PR jobs should be read-only.
+ */
+
+/**
+ * Compute HMAC signature for a cache entry.
+ * Signs the JSON content (excluding the signature field itself).
+ */
+export function signCacheEntry(content: string, signingKey: string): string {
+  return createHmac("sha256", signingKey).update(content).digest("hex");
+}
+
+/**
+ * Verify HMAC signature for a cache entry.
+ * Returns true if signature is valid, false otherwise.
+ */
+export function verifyCacheEntrySignature(
+  content: string,
+  signature: string,
+  signingKey: string,
+): boolean {
+  const expectedSignature = signCacheEntry(content, signingKey);
+  // Use timing-safe comparison to prevent timing attacks
+  if (signature.length !== expectedSignature.length) return false;
+  let result = 0;
+  for (let i = 0; i < signature.length; i++) {
+    result |= signature.charCodeAt(i) ^ expectedSignature.charCodeAt(i);
+  }
+  return result === 0;
 }

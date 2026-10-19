@@ -5,8 +5,8 @@ export default defineConfig({
     globals: true,
     // The contract suite boots the CLI per case (mkdtemp + recursive fixture copy + plugin
     // load via `runCli`). Those take ~400ms locally but can blow past the default 5s
-    testTimeout: 20_000,
-    hookTimeout: 20_000,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   server: {
     fs: {

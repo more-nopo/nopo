@@ -153,3 +153,130 @@ describe("PR#37 repros", () => {
     expect(done).toBe(true);
   }, 10000);
 });
+
+describe("PR#37 additional fixes", () => {
+  it("container context steps are never cacheable", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    // Node with contextOverride === "container"
+    const containerNode: PlanNode = {
+      id: "cmd:0:api:test-container",
+      handler: { kind: "builtin", name: "command:exec" },
+      needs: [],
+      target: "api",
+      payload: { commandName: "test", contextOverride: "container" },
+    };
+    const c = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;
+    const result = await c.lookup(containerNode);
+    expect(result.hit).toBe(false);
+    expect(result.stepKey).toBe(null);
+    expect(result.bypassed).toBe(true);
+    expect(result.bypassReason).toContain("container context");
+  });
+
+  it("HMAC signing: unsigned entries rejected when signing key is configured", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    const node = cmdNode("api");
+    // Warm cache WITHOUT signing key
+    await warm(p, node);
+    // Try to read WITH signing key - should reject
+    const c = (await StepCache.create(cfg({ signingKey: "test-secret" }), { project: p, repoRoot: repo, env: {} }))!;
+    const result = await c.lookup(node);
+    expect(result.hit).toBe(false);
+  });
+
+  it("HMAC signing: signed entries accepted when signing key matches", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    const node = cmdNode("api");
+    const signingKey = "my-secret-key";
+    // Warm cache WITH signing key
+    const c1 = (await StepCache.create(cfg({ signingKey }), { project: p, repoRoot: repo, env: {} }))!;
+    const k = (await c1.lookup(node)).stepKey;
+    await c1.record(k, true, 10, node);
+    // Read with same signing key - should accept
+    const c2 = (await StepCache.create(cfg({ signingKey }), { project: p, repoRoot: repo, env: {} }))!;
+    const result = await c2.lookup(node);
+    expect(result.hit).toBe(true);
+  });
+
+  it("HMAC signing: signed entries rejected with wrong signing key", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    const node = cmdNode("api");
+    // Warm cache WITH signing key
+    const c1 = (await StepCache.create(cfg({ signingKey: "key-1" }), { project: p, repoRoot: repo, env: {} }))!;
+    const k = (await c1.lookup(node)).stepKey;
+    await c1.record(k, true, 10, node);
+    // Read with different signing key - should reject
+    const c2 = (await StepCache.create(cfg({ signingKey: "key-2" }), { project: p, repoRoot: repo, env: {} }))!;
+    const result = await c2.lookup(node);
+    expect(result.hit).toBe(false);
+  });
+
+  it("cache.env in service config affects key", async () => {
+    // Service with cache.env declaring MY_VAR
+    const svcWithEnv = {
+      ...svc(`${repo}/packages/api`),
+      cache: { env: ["MY_VAR"] },
+    };
+    const p = project({ api: svcWithEnv });
+    const node = cmdNode("api");
+    // Warm with MY_VAR=value1
+    const c1 = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: { MY_VAR: "value1" } }))!;
+    const k1 = (await c1.lookup(node)).stepKey;
+    await c1.record(k1, true, 10, node);
+    // Read with MY_VAR=value2 - should miss (different key)
+    const c2 = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: { MY_VAR: "value2" } }))!;
+    const r = await c2.lookup(node);
+    expect(r.hit).toBe(false);
+    // Keys should differ
+    expect(r.stepKey?.key).not.toBe(k1?.key);
+  });
+
+  it("plugin hook includes plugin source hash in key", async () => {
+    // Create a fake plugin file
+    const pluginPath = path.join(repo, "plugin.ts");
+    fs.writeFileSync(pluginPath, "export function lint() {}");
+    sh("git -c user.email=a@b -c user.name=a add -A && git -c user.email=a@b -c user.name=a commit -qm plugin");
+
+    const pluginNode: PlanNode = {
+      id: "eslint:lint:api",
+      handler: { kind: "plugin-hook", plugin: "eslint", hook: "lint" },
+      needs: [],
+      target: "api",
+    };
+    const p = {
+      services: { entries: { api: svc(`${repo}/packages/api`) } },
+      plugins: [{ definition: { name: "eslint", sourcePath: pluginPath } }],
+    } as never;
+
+    const c1 = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;
+    const k1 = (await c1.lookup(pluginNode)).stepKey;
+    await c1.record(k1, true, 10, pluginNode);
+
+    // Modify plugin source
+    fs.writeFileSync(pluginPath, "export function lint() { /* changed */ }");
+    sh("git -c user.email=a@b -c user.name=a commit -qam update-plugin");
+
+    const c2 = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;
+    const k2 = (await c2.lookup(pluginNode)).stepKey;
+    // Key should differ due to plugin source change
+    expect(k2?.key).not.toBe(k1?.key);
+  });
+
+  it("skipped steps emit node-skip plan events", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    await warm(p, cmdNode("api"));
+    const events: Array<{ type: string; nodeId?: string }> = [];
+    const io = { env: {}, stdout: { write: () => true }, stderr: { write: () => true } } as never;
+    await executePlanWithCache(planFromNodes([cmdNode("api")]), {
+      io,
+      project: p,
+      repoRoot: repo,
+      cache: cfg(),
+      dispatch: { builtin: async () => {}, pluginHook: async () => {} },
+      onEvent: (e) => events.push(e),
+    } as never);
+    const skipEvent = events.find(e => e.type === "node-skip");
+    expect(skipEvent).toBeDefined();
+    expect(skipEvent?.nodeId).toBe("cmd:0:api:test");
+  });
+});

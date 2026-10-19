@@ -23,7 +23,7 @@
  * lives inside implementations.
  */
 
-import type { StepKey } from "./cache-key.ts";
+import { signCacheEntry, verifyCacheEntrySignature, type StepKey } from "./cache-key.ts";
 
 /** Cached result metadata */
 export interface CacheEntry {
@@ -39,6 +39,8 @@ export interface CacheEntry {
   createdAt: string;
   /** When this entry expires (ISO timestamp) */
   expiresAt: string;
+  /** HMAC signature for tamper detection (when NOPO_CACHE_SIGNING_KEY is set) */
+  signature?: string;
   /** Optional metadata for debugging */
   meta?: Record<string, unknown>;
 }
@@ -191,6 +193,7 @@ export function storeConfigFromEnv(env: Record<string, string | undefined>): Sto
 
 /**
  * Create cache entry from step result.
+ * If signingKey is provided, the entry is signed.
  */
 export function createCacheEntry(
   stepKey: StepKey,
@@ -199,11 +202,12 @@ export function createCacheEntry(
   ttlSeconds: number,
   runUrl?: string,
   meta?: Record<string, unknown>,
+  signingKey?: string,
 ): CacheEntry {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
-  return {
+  const entry: CacheEntry = {
     key: stepKey.key,
     passed,
     durationMs,
@@ -212,6 +216,42 @@ export function createCacheEntry(
     expiresAt: expiresAt.toISOString(),
     meta,
   };
+
+  // Sign the entry if a signing key is provided
+  if (signingKey) {
+    // Create content to sign (everything except signature)
+    const contentToSign = JSON.stringify(entry);
+    entry.signature = signCacheEntry(contentToSign, signingKey);
+  }
+
+  return entry;
+}
+
+/**
+ * Verify a cache entry's signature.
+ * Returns true if:
+ * - No signing key is configured (signature not required)
+ * - Entry has valid signature matching the signing key
+ *
+ * Returns false if:
+ * - Signing key is configured but entry has no signature
+ * - Signing key is configured and signature is invalid
+ */
+export function verifyCacheEntry(entry: CacheEntry, signingKey?: string): boolean {
+  if (!signingKey) {
+    // No signing key configured - accept all entries
+    return true;
+  }
+
+  if (!entry.signature) {
+    // Signing key configured but entry is unsigned - reject
+    return false;
+  }
+
+  // Verify signature (reconstruct content without signature field)
+  const { signature, ...contentFields } = entry;
+  const contentToSign = JSON.stringify(contentFields);
+  return verifyCacheEntrySignature(contentToSign, signature, signingKey);
 }
 
 /**

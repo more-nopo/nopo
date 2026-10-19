@@ -18,8 +18,10 @@
 export {
   buildStepKeyInputs,
   checkCacheEligibility,
+  collectExtraInputHashes,
   collectLockfileHashes,
   collectPathsForDirtyCheck,
+  collectPluginHashes,
   collectRootConfigHashes,
   collectTreeHashes,
   collectTreeHashesForTargets,
@@ -30,14 +32,19 @@ export {
   getGitTreeHash,
   getNopoVersion,
   getRuntimeVersion,
+  getServiceCacheConfig,
   hashFileContent,
   isHandlerCacheable,
   isPathDirty,
+  signCacheEntry,
+  verifyCacheEntrySignature,
   type BuildStepKeyResult,
   type CacheableCheck,
   type CacheEligibility,
+  type ServiceCacheConfig,
   type StepKey,
   type StepKeyInputs,
+  type TreeHashCache,
 } from "./cache-key.ts";
 
 export {
@@ -46,6 +53,7 @@ export {
   DEFAULT_TTL_SECONDS,
   isExpired,
   storeConfigFromEnv,
+  verifyCacheEntry,
   type CacheEntry,
   type ResultStore,
   type StoreConfig,
@@ -70,6 +78,7 @@ import {
   createResultStore,
   DEFAULT_TTL_SECONDS,
   storeConfigFromEnv,
+  verifyCacheEntry,
   type CacheEntry,
   type ResultStore,
   type StoreConfig,
@@ -93,6 +102,13 @@ export interface CacheConfig {
   samplingPercent: number;
   /** URL of the current CI run (for cache metadata) */
   runUrl?: string;
+  /**
+   * HMAC signing key for cache entry integrity.
+   * When set, entries are signed on write and verified on read.
+   * Unsigned/invalid entries are rejected when a key is configured.
+   * Set via NOPO_CACHE_SIGNING_KEY environment variable.
+   */
+  signingKey?: string;
 }
 
 /** Context for cache operations */
@@ -133,6 +149,8 @@ export class StepCache {
   private readonly stepKeys = new Map<string, StepKey | null>();
   private readonly eligibilityCache = new Map<string, { eligible: boolean; reason?: string }>();
   private readonly uncacheableReasons = new Map<string, string>();
+  /** Per-run memoization cache for git tree hashes */
+  private readonly treeHashCache: Map<string, string | null> = new Map();
 
   private constructor(
     store: ResultStore,
@@ -273,6 +291,8 @@ export class StepCache {
       durationMs,
       this.config.ttlSeconds,
       this.config.runUrl ?? this.context.runUrl,
+      undefined, // meta
+      this.config.signingKey, // Sign if key is configured
     );
 
     await this.store.put(entry);
@@ -310,6 +330,7 @@ export class StepCache {
    * - passed === true (boolean, not truthy string like "false")
    * - key matching the requested key
    * - not expired (based on TTL)
+   * - valid signature (if NOPO_CACHE_SIGNING_KEY is configured)
    */
   private validateEntry(entry: CacheEntry | null, expectedKey: string): boolean {
     if (entry === null) return false;
@@ -322,6 +343,11 @@ export class StepCache {
 
     // Check expiration (enforce TTL from reader side)
     if (new Date(entry.expiresAt) < new Date()) return false;
+
+    // Verify signature if signing key is configured
+    if (!verifyCacheEntry(entry, this.config.signingKey)) {
+      return false;
+    }
 
     return true;
   }
@@ -366,6 +392,7 @@ export class StepCache {
       this.context.repoRoot,
       envInputs,
       this.context.env as Record<string, string>,
+      this.treeHashCache,
     );
 
     if (result.inputs === null) {
@@ -396,6 +423,7 @@ export class StepCache {
  * - NOPO_CACHE_STORE: "filesystem" | "s3" (default: filesystem)
  * - NOPO_CACHE_TTL: TTL in seconds (default: 604800 = 7 days)
  * - NOPO_CACHE_SAMPLING: Verification sampling percentage (default: 0)
+ * - NOPO_CACHE_SIGNING_KEY: HMAC signing key for cache entry integrity
  * - NOPO_CACHE_RUN_URL: CI run URL for metadata
  * - GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID: Auto-detect GitHub Actions run URL
  */
@@ -420,9 +448,13 @@ export function loadCacheConfig(
     override?.ttlSeconds ??
     (env.NOPO_CACHE_TTL ? parseInt(env.NOPO_CACHE_TTL, 10) : DEFAULT_TTL_SECONDS);
 
+  // NOPO_CACHE_SAMPLING from env should be honored when override.samplingPercent is not set
   const samplingPercent =
     override?.samplingPercent ??
     (env.NOPO_CACHE_SAMPLING ? parseInt(env.NOPO_CACHE_SAMPLING, 10) : 0);
+
+  // HMAC signing key for cache entry integrity
+  const signingKey = override?.signingKey ?? env.NOPO_CACHE_SIGNING_KEY;
 
   // Auto-detect CI run URL
   let runUrl = override?.runUrl ?? env.NOPO_CACHE_RUN_URL;
@@ -437,6 +469,7 @@ export function loadCacheConfig(
     store: storeConfig,
     ttlSeconds,
     samplingPercent,
+    signingKey,
     runUrl,
   };
 }

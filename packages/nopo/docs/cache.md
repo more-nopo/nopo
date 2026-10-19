@@ -17,12 +17,16 @@ When enabled, the cache:
 
 A step's cache key is a SHA-256 hash of:
 
-- **Target tree hashes**: Git tree hash of the target and all its dependencies
-- **Lockfile hash**: SHA-256 of the package manager lockfile
-- **Runtime version**: Node.js version
+- **Target tree hashes**: Git tree hash of the target and all its dependencies (transitive)
+- **Root config hashes**: SHA-256 of root-level config files (tsconfig*.json, eslint.config.*, .nvmrc, etc.)
+- **Lockfile hashes**: SHA-256 of all lockfiles (bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml)
+- **Plugin source hashes**: For plugin hooks, SHA-256 of the plugin's source file
+- **Runtime version**: Node.js/Bun version
+- **nopo version**: The nopo package version
 - **Command/handler**: The command being executed
 - **Payload**: Command arguments and configuration
-- **Declared env inputs**: Values of environment variables that affect the step
+- **Declared env inputs**: Values of environment variables that affect the step (default: CI, NODE_ENV; plus service-declared cache.env)
+- **Extra input hashes**: SHA-256 of files declared in service cache.inputs
 
 The key design is hierarchical:
 
@@ -170,32 +174,71 @@ Filters select candidate steps; the cache then skips any candidate whose exact k
 By default, the cache considers:
 
 - Target directory files (via git tree hash)
-- Lockfile content
+- All lockfiles in repo root
+- Root-level config files (tsconfig*.json, eslint.config.*, etc.)
 - `CI` and `NODE_ENV` environment variables
 
 If your step depends on other inputs, declare them in your service's `nopo.yml`:
 
 ```yaml
-# nopo.yml (future feature)
+# packages/api/nopo.yml
 cache:
-  env_inputs:
+  # Additional environment variables that affect this service's cache key
+  env:
     - DATABASE_URL
     - API_KEY
-  extra_files:
+  # Extra input file globs relative to service root
+  # IMPORTANT: gitignored files must be declared here to be included in the key
+  inputs:
     - ../shared/config.json
+    - "generated/**/*.json"
 ```
 
 **Warning**: Undeclared inputs can cause false cache hits. Use `--cache-sampling` to detect these.
+
+**Important**: Files matched by `.gitignore` are not tracked by git tree hashes. If your step depends on gitignored files, you must declare them in `cache.inputs` for the cache to work correctly.
+
+## HMAC Signing for Cache Integrity
+
+To prevent cache poisoning from untrusted writers, you can enable HMAC signing:
+
+```bash
+# Set signing key (should be a secret in CI)
+export NOPO_CACHE_SIGNING_KEY=your-secret-signing-key
+```
+
+When a signing key is configured:
+- **Write**: Cache entries are signed with the key
+- **Read**: Unsigned entries or entries with invalid signatures are rejected
+
+**Recommendation**: Give write credentials only to trusted CI events (push to main, merge_group). PR jobs should be read-only (no write credentials or `NOPO_CACHE_WRITE=0`).
+
+```yaml
+# GitHub Actions example with signing
+jobs:
+  test-pr:
+    # PR jobs: read-only, no signing key needed
+    env:
+      NOPO_CACHE_WRITE: "0"
+    # ...
+
+  test-main:
+    if: github.ref == 'refs/heads/main'
+    # Main branch: write enabled with signing
+    env:
+      NOPO_CACHE_SIGNING_KEY: ${{ secrets.CACHE_SIGNING_KEY }}
+    # ...
+```
 
 ## Forcing a Full Run
 
 To bypass the cache completely:
 
 ```bash
-# Disable cache lookups (results still recorded)
+# Completely disable caching—no lookups and no recording
 nopo test --no-cache
 
-# Or unset the env var
+# Or disable via env var
 NOPO_CACHE=0 nopo test
 ```
 
@@ -231,15 +274,24 @@ When a step is bypassed due to dirty files, you'll see:
 
 To get cache hits locally, commit your changes first.
 
+## Container Context Steps
+
+Steps running with `--context container` (kubectl exec) are **never cached**. These steps execute in a different environment where the host's git state doesn't reliably reflect the container's state.
+
+```bash
+# This step will always run, never cached
+nopo test api --context container
+```
+
 ## Known Limitations
 
 1. **Undeclared inputs**: Files or environment variables not captured in the key can cause false hits. Use sampling to detect.
 
 2. **Build output sharing**: The cache only records pass/fail status, not build artifacts. Steps that produce outputs (builds, generated files) still need separate artifact caching.
 
-3. **Container context**: Steps running in containers use the container's runtime version, not the host's.
+3. **System dependencies**: OS packages and system tools are not tracked. Changes to system deps may not invalidate cache.
 
-4. **System dependencies**: OS packages and system tools are not tracked. Changes to system deps may not invalidate cache.
+4. **Gitignored files**: Files matched by `.gitignore` must be explicitly declared in `cache.inputs` to be included in the cache key.
 
 ## Debugging
 

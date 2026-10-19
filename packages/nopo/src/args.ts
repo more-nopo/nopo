@@ -85,8 +85,8 @@ export const baseArgs = new ScriptArgs({
   "no-cache": {
     type: "boolean",
     description:
-      "Force full execution even if cache is enabled. Disables all cache " +
-      "lookups for this invocation; results are still recorded.",
+      "Force full execution even if cache is enabled. Completely disables " +
+      "caching for this invocation—no lookups and no recording of results.",
     default: false,
   },
 

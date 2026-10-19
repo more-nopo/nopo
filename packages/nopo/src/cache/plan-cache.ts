@@ -161,6 +161,13 @@ export async function executePlanWithCache(
           durationMs: 0,
         });
 
+        // Emit node-skip event so the renderer can track this node
+        ctx.onEvent?.({
+          type: "node-skip",
+          nodeId,
+          reason: "cache hit",
+        });
+
         // Log cache hit
         ctx.io.stdout.write(
           formatCacheHitMessage(nodeId, result.stepKey, result.entry) + "\n",
