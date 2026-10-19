@@ -1,5 +1,13 @@
 # @more-nopo/nopo-plugin-vitest
 
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [ce50121]
+  - @more-nopo/nopo@0.4.0
+  - @more-nopo/nopo-test-relevance@0.0.4
+
 ## 0.4.2
 
 ### Patch Changes

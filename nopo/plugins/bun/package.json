@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-bun",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -11,9 +11,9 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@more-nopo/nopo": "^0.3.0",
+    "@more-nopo/nopo": "^0.4.0",
     "zod": "^3.24.2",
-    "@more-nopo/nopo-test-relevance": "^0.0.3"
+    "@more-nopo/nopo-test-relevance": "^0.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.16.0",
