@@ -22,6 +22,7 @@ import {
 import {
   type CacheConfig,
   type CacheContext,
+  type CacheEntry,
   formatBypassMessage,
   formatCacheHitMessage,
   formatVerifyMessage,

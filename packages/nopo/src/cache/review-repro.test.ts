@@ -116,7 +116,7 @@ describe("PR#37 repros", () => {
   it("R7 poisoned entry: passed:\"false\" string / far-future expiresAt / mismatched key must not hit", async () => {
     const p = project({ api: svc(`${repo}/packages/api`) });
     const node = cmdNode("api");
-    const k = (await hit(p, node)).stepKey.key;
+    const k = (await hit(p, node)).stepKey!.key;
     fs.mkdirSync(path.join(cacheDir, k.slice(0, 2)), { recursive: true });
     fs.writeFileSync(path.join(cacheDir, k.slice(0, 2), `${k}.json`), JSON.stringify({ key: "attacker", passed: "false", durationMs: 1, createdAt: "2000-01-01T00:00:00Z", expiresAt: "2099-01-01T00:00:00Z" }));
     const r = await hit(p, node);
