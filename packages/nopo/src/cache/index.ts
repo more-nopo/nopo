@@ -18,15 +18,23 @@
 export {
   buildStepKeyInputs,
   checkCacheEligibility,
+  collectLockfileHashes,
+  collectPathsForDirtyCheck,
+  collectRootConfigHashes,
   collectTreeHashes,
+  collectTreeHashesForTargets,
   computePlanKey,
   computeStepKey,
   getDeclaredEnvInputs,
   getDirtyPaths,
   getGitTreeHash,
+  getNopoVersion,
   getRuntimeVersion,
   hashFileContent,
+  isHandlerCacheable,
   isPathDirty,
+  type BuildStepKeyResult,
+  type CacheableCheck,
   type CacheEligibility,
   type StepKey,
   type StepKeyInputs,
@@ -103,13 +111,13 @@ export interface CacheContext {
 export interface CacheLookupResult {
   /** Whether there was a cache hit */
   hit: boolean;
-  /** The step key computed for this node */
-  stepKey: StepKey;
+  /** The step key computed for this node, null if not cacheable */
+  stepKey: StepKey | null;
   /** The cached entry if hit */
   entry?: CacheEntry;
   /** Whether this hit should be verified via sampling */
   shouldVerify: boolean;
-  /** Whether cache was bypassed due to dirty working tree */
+  /** Whether cache was bypassed (dirty tree, not cacheable, etc.) */
   bypassed: boolean;
   /** Reason for bypass (e.g., "uncommitted changes in: api, shared") */
   bypassReason?: string;
@@ -122,8 +130,9 @@ export class StepCache {
   private readonly store: ResultStore;
   private readonly config: CacheConfig;
   private readonly context: CacheContext;
-  private readonly stepKeys = new Map<string, StepKey>();
+  private readonly stepKeys = new Map<string, StepKey | null>();
   private readonly eligibilityCache = new Map<string, { eligible: boolean; reason?: string }>();
+  private readonly uncacheableReasons = new Map<string, string>();
 
   private constructor(
     store: ResultStore,
@@ -164,13 +173,36 @@ export class StepCache {
     return this.config.writeEnabled;
   }
 
+  /** Get the underlying store (for direct operations like delete) */
+  get resultStore(): ResultStore {
+    return this.store;
+  }
+
   /**
    * Look up a cache entry for a plan node.
-   * Only returns hits for passing results.
-   * Bypasses cache (no read, no write) for steps with dirty working trees.
+   * Only returns hits for passing results with valid trust properties.
+   * Bypasses cache (no read, no write) for:
+   * - Steps with dirty working trees
+   * - Non-cacheable handlers (side-effectful operations)
+   * - Nodes without tree hashes
    */
   async lookup(node: PlanNode): Promise<CacheLookupResult> {
-    const stepKey = this.computeStepKey(node);
+    // Compute or retrieve step key (may be null if not cacheable)
+    const stepKeyResult = this.computeStepKey(node);
+
+    // If step is not cacheable, bypass
+    if (stepKeyResult === null) {
+      const reason = this.uncacheableReasons.get(node.id) ?? "not cacheable";
+      return {
+        hit: false,
+        stepKey: null,
+        shouldVerify: false,
+        bypassed: true,
+        bypassReason: reason,
+      };
+    }
+
+    const stepKey = stepKeyResult;
 
     // Check if this step is eligible for caching (working tree clean)
     const eligibility = this.checkEligibility(node);
@@ -187,14 +219,15 @@ export class StepCache {
     // Try to get cached entry
     const entry = await this.store.get(stepKey.key);
 
-    // Only hit on passing results
-    const hit = entry !== null && entry.passed;
+    // Validate entry trust: must have passed === true (boolean, not string),
+    // key must match, and must not be expired
+    const isValidEntry = this.validateEntry(entry, stepKey.key);
 
     // Determine if we should verify this hit via sampling
-    const shouldVerify = hit && this.shouldSampleVerify();
+    const shouldVerify = isValidEntry && this.shouldSampleVerify();
 
     return {
-      hit: hit && !shouldVerify, // If verifying, treat as miss
+      hit: isValidEntry && !shouldVerify, // If verifying, treat as miss
       stepKey,
       entry: entry ?? undefined,
       shouldVerify,
@@ -204,17 +237,19 @@ export class StepCache {
 
   /**
    * Record a step result in the cache.
-   * Only passing results are stored.
-   * Skips recording if writes are disabled or working tree is dirty.
+   * - Passing results are stored
+   * - Failed results invalidate any existing entry (for verification failures)
+   * Skips if writes are disabled, not cacheable, or working tree is dirty.
+   * Returns a promise that resolves when the write completes (for awaiting).
    */
   async record(
-    stepKey: StepKey,
+    stepKey: StepKey | null,
     passed: boolean,
     durationMs: number,
     node?: PlanNode,
   ): Promise<void> {
-    // Only cache passes
-    if (!passed) return;
+    // Can't record without a step key
+    if (stepKey === null) return;
 
     // Skip if writes are disabled
     if (!this.config.writeEnabled) return;
@@ -225,6 +260,13 @@ export class StepCache {
       if (!eligibility.eligible) return;
     }
 
+    // If the step failed, invalidate any existing cached entry
+    // This handles verification failures - a cached pass that fails on re-run is a false hit
+    if (!passed) {
+      await this.invalidate(stepKey.key);
+      return;
+    }
+
     const entry = createCacheEntry(
       stepKey,
       passed,
@@ -233,27 +275,55 @@ export class StepCache {
       this.config.runUrl ?? this.context.runUrl,
     );
 
-    try {
-      await this.store.put(entry);
-    } catch (err) {
-      // Log but don't fail the build
-      console.warn(`[cache] Failed to store result for ${stepKey.key}:`, err);
+    await this.store.put(entry);
+  }
+
+  /**
+   * Delete/invalidate a cache entry.
+   * Used when verification fails to remove false-positive entries.
+   */
+  async invalidate(key: string): Promise<void> {
+    if (this.store.delete) {
+      await this.store.delete(key);
     }
   }
 
   /**
    * Get the computed step key for a node.
+   * Returns null if the node is not cacheable.
    * Keys are cached for the lifetime of the StepCache instance.
    */
-  getStepKey(node: PlanNode): StepKey {
+  getStepKey(node: PlanNode): StepKey | null {
     return this.computeStepKey(node);
   }
 
   /**
    * Get all computed step keys.
    */
-  getAllStepKeys(): ReadonlyMap<string, StepKey> {
+  getAllStepKeys(): ReadonlyMap<string, StepKey | null> {
     return this.stepKeys;
+  }
+
+  /**
+   * Validate a cache entry for trust.
+   * Entry must have:
+   * - passed === true (boolean, not truthy string like "false")
+   * - key matching the requested key
+   * - not expired (based on TTL)
+   */
+  private validateEntry(entry: CacheEntry | null, expectedKey: string): boolean {
+    if (entry === null) return false;
+
+    // passed must be boolean true, not a string "true" or "false"
+    if (entry.passed !== true) return false;
+
+    // key must match exactly
+    if (entry.key !== expectedKey) return false;
+
+    // Check expiration (enforce TTL from reader side)
+    if (new Date(entry.expiresAt) < new Date()) return false;
+
+    return true;
   }
 
   private checkEligibility(node: PlanNode): { eligible: boolean; reason?: string } {
@@ -261,23 +331,15 @@ export class StepCache {
     const cached = this.eligibilityCache.get(node.id);
     if (cached) return cached;
 
-    // Get lockfile path for this node
-    let lockfilePath: string | undefined;
-    if (node.target) {
-      const service = this.context.project.services.entries[node.target];
-      if (service && service.packageManagers.length > 0) {
-        lockfilePath = service.packageManagers[0]!.lockfile;
-      }
-    }
-    if (!lockfilePath) {
-      lockfilePath = path.join(this.context.repoRoot, "bun.lock");
-    }
+    // Get claimed targets from batch nodes
+    const payload = node.payload as { targets?: string[] } | undefined;
+    const claimedTargets = payload?.targets;
 
     const eligibility = checkCacheEligibility(
       this.context.project,
       node.target,
       this.context.repoRoot,
-      lockfilePath,
+      claimedTargets,
     );
 
     const result = { eligible: eligibility.eligible, reason: eligibility.reason };
@@ -285,10 +347,11 @@ export class StepCache {
     return result;
   }
 
-  private computeStepKey(node: PlanNode): StepKey {
-    // Return cached key if already computed
-    const cached = this.stepKeys.get(node.id);
-    if (cached) return cached;
+  private computeStepKey(node: PlanNode): StepKey | null {
+    // Return cached key if already computed (including null for non-cacheable)
+    if (this.stepKeys.has(node.id)) {
+      return this.stepKeys.get(node.id)!;
+    }
 
     // Get declared env inputs for this target
     const service = node.target
@@ -296,8 +359,8 @@ export class StepCache {
       : undefined;
     const envInputs = getDeclaredEnvInputs(service);
 
-    // Build inputs and compute key
-    const inputs = buildStepKeyInputs(
+    // Build inputs - may return null if not cacheable
+    const result = buildStepKeyInputs(
       node,
       this.context.project,
       this.context.repoRoot,
@@ -305,7 +368,14 @@ export class StepCache {
       this.context.env as Record<string, string>,
     );
 
-    const stepKey = computeStepKey(inputs);
+    if (result.inputs === null) {
+      // Not cacheable - remember why
+      this.uncacheableReasons.set(node.id, result.reason ?? "not cacheable");
+      this.stepKeys.set(node.id, null);
+      return null;
+    }
+
+    const stepKey = computeStepKey(result.inputs);
     this.stepKeys.set(node.id, stepKey);
     return stepKey;
   }
@@ -376,10 +446,10 @@ export function loadCacheConfig(
  */
 export function formatCacheHitMessage(
   nodeId: string,
-  stepKey: StepKey,
+  stepKey: StepKey | null,
   entry: CacheEntry,
 ): string {
-  const keyShort = stepKey.key.slice(0, 12);
+  const keyShort = stepKey?.key.slice(0, 12) ?? "unknown";
   const durationStr = entry.durationMs < 1000
     ? `${entry.durationMs}ms`
     : `${(entry.durationMs / 1000).toFixed(1)}s`;
@@ -395,8 +465,8 @@ export function formatCacheHitMessage(
 /**
  * Format a cache verification message (when sampling triggers re-run).
  */
-export function formatVerifyMessage(nodeId: string, stepKey: StepKey): string {
-  const keyShort = stepKey.key.slice(0, 12);
+export function formatVerifyMessage(nodeId: string, stepKey: StepKey | null): string {
+  const keyShort = stepKey?.key.slice(0, 12) ?? "unknown";
   return `[cache] ⚡ ${nodeId} re-running for verification (key: ${keyShort})`;
 }
 

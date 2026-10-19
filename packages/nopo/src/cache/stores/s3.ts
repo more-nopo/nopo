@@ -35,6 +35,9 @@ export interface S3StoreConfig {
 // We use fetch-based S3 API instead of full AWS SDK to keep dependencies minimal
 // and avoid issues with bundling. This implements a minimal S3-compatible client.
 
+// Request timeout in milliseconds (3 seconds)
+const REQUEST_TIMEOUT_MS = 3000;
+
 export class S3Store implements ResultStore {
   readonly name = "s3";
   private readonly config: S3StoreConfig;
@@ -55,8 +58,8 @@ export class S3Store implements ResultStore {
     }
 
     try {
-      // Try a HEAD request on the bucket
-      const response = await this.s3Request("HEAD", "", {});
+      // Try a HEAD request on the bucket with timeout
+      const response = await this.s3Request("HEAD", "", {}, REQUEST_TIMEOUT_MS);
       return response.ok || response.status === 404; // 404 is ok for HEAD on non-existent key
     } catch {
       return false;
@@ -66,38 +69,55 @@ export class S3Store implements ResultStore {
   async get(key: string): Promise<CacheEntry | null> {
     const objectKey = this.keyToObjectKey(key);
 
-    try {
-      const response = await this.s3Request("GET", objectKey, {});
+    // Wrap the entire operation in a timeout
+    // This covers both the fetch and the body reading
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), REQUEST_TIMEOUT_MS);
+    });
 
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`S3 GET failed: ${response.status} ${response.statusText}`);
-      }
+    const getPromise = (async (): Promise<CacheEntry | null> => {
+      try {
+        const response = await this.s3Request("GET", objectKey, {}, REQUEST_TIMEOUT_MS);
 
-      const content = await response.text();
-      const entry: CacheEntry = JSON.parse(content);
+        if (!response.ok) {
+          if (response.status === 404) return null;
+          throw new Error(`S3 GET failed: ${response.status} ${response.statusText}`);
+        }
 
-      // Check expiration
-      if (isExpired(entry)) {
-        // Clean up expired entry asynchronously
-        this.delete(key).catch(() => {});
+        const content = await response.text();
+        const entry: CacheEntry = JSON.parse(content);
+
+        // Check expiration
+        if (isExpired(entry)) {
+          // Clean up expired entry asynchronously (no await, fire-and-forget)
+          this.delete(key).catch(() => {});
+          return null;
+        }
+
+        return entry;
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("404")) {
+          return null;
+        }
+        // Timeout or other errors - treat as miss
+        if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+          console.warn(`[cache] S3 GET timed out for ${key}`);
+          return null;
+        }
+        console.error(`[cache] S3 GET failed for ${key}:`, err);
         return null;
       }
+    })();
 
-      return entry;
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("404")) {
-        return null;
-      }
-      console.error(`[cache] S3 GET failed for ${key}:`, err);
-      return null;
-    }
+    // Race the get operation against the timeout
+    return Promise.race([getPromise, timeoutPromise]);
   }
 
   async put(entry: CacheEntry): Promise<void> {
     const objectKey = this.keyToObjectKey(entry.key);
     const content = JSON.stringify(entry, null, 2);
 
+    // PUT requests have a longer timeout since we need to wait for upload
     const response = await this.s3Request("PUT", objectKey, {
       body: content,
       headers: {
@@ -105,18 +125,18 @@ export class S3Store implements ResultStore {
         // Store expiration in metadata for potential lifecycle rule usage
         "x-amz-meta-expires-at": entry.expiresAt,
       },
-    });
+    }, REQUEST_TIMEOUT_MS * 3); // 9 second timeout for PUTs
 
     if (!response.ok) {
       throw new Error(`S3 PUT failed: ${response.status} ${response.statusText}`);
     }
   }
 
-  private async delete(key: string): Promise<void> {
+  async delete(key: string): Promise<void> {
     const objectKey = this.keyToObjectKey(key);
 
     try {
-      await this.s3Request("DELETE", objectKey, {});
+      await this.s3Request("DELETE", objectKey, {}, REQUEST_TIMEOUT_MS);
     } catch {
       // Ignore delete errors
     }
@@ -131,11 +151,13 @@ export class S3Store implements ResultStore {
   /**
    * Minimal S3-compatible request using AWS Signature Version 4.
    * This avoids pulling in the full AWS SDK.
+   * @param timeoutMs - Request timeout in milliseconds (uses AbortSignal.timeout)
    */
   private async s3Request(
     method: string,
     objectKey: string,
     options: { body?: string; headers?: Record<string, string> },
+    timeoutMs?: number,
   ): Promise<Response> {
     const accessKeyId = this.config.accessKeyId ?? process.env.AWS_ACCESS_KEY_ID ?? "";
     const secretAccessKey = this.config.secretAccessKey ?? process.env.AWS_SECRET_ACCESS_KEY ?? "";
@@ -216,11 +238,18 @@ export class S3Store implements ResultStore {
       `Signature=${signature}`,
     ].join(", ");
 
-    return fetch(url, {
+    // Create fetch options with optional timeout signal
+    const fetchOptions: RequestInit = {
       method,
       headers,
       body: options.body,
-    });
+    };
+
+    if (timeoutMs !== undefined) {
+      fetchOptions.signal = AbortSignal.timeout(timeoutMs);
+    }
+
+    return fetch(url, fetchOptions);
   }
 
   private async sha256Hex(data: string): Promise<string> {

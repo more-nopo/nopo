@@ -101,6 +101,18 @@ export class FilesystemStore implements ResultStore {
     }
   }
 
+  async delete(key: string): Promise<void> {
+    const filePath = this.keyToPath(key);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      // Ignore ENOENT (file already gone)
+      if (err instanceof Error && "code" in err && err.code !== "ENOENT") {
+        throw err;
+      }
+    }
+  }
+
   async cleanup(): Promise<number> {
     let cleaned = 0;
     const now = new Date();

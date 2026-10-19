@@ -51,6 +51,7 @@ export interface ResultStore {
   /**
    * Get a cached result by key.
    * Returns null if not found or expired.
+   * Implementations should timeout (~3s) to avoid blocking the run.
    */
   get(key: string): Promise<CacheEntry | null>;
 
@@ -60,8 +61,15 @@ export interface ResultStore {
   put(entry: CacheEntry): Promise<void>;
 
   /**
+   * Delete a cache entry (for invalidation after verification failure).
+   * Optional - not all stores may support deletion.
+   */
+  delete?(key: string): Promise<void>;
+
+  /**
    * Check if the store is available/configured.
    * Returns false if credentials are missing or store is unreachable.
+   * Implementations should timeout (~3s) to avoid blocking the run.
    */
   isAvailable(): Promise<boolean>;
 

@@ -48,13 +48,18 @@ export interface CachedPlanRunResult extends PlanRunResult {
   cacheMisses: number;
   /** Number of steps re-run for verification */
   verifications: number;
-  /** Number of steps bypassed due to dirty working tree */
+  /** Number of steps bypassed (dirty tree, not cacheable, etc.) */
   bypasses: number;
   /** Whether writes are enabled */
   writeEnabled: boolean;
-  /** Step keys computed during execution */
-  stepKeys: ReadonlyMap<string, StepKey>;
+  /** Step keys computed during execution (null for non-cacheable nodes) */
+  stepKeys: ReadonlyMap<string, StepKey | null>;
+  /** Number of false-hit detections (verification failures that invalidated entries) */
+  falseHits: number;
 }
+
+// Timeout for awaiting pending writes before returning (10 seconds)
+const WRITE_AWAIT_TIMEOUT_MS = 10_000;
 
 /**
  * Execute a plan with caching support.
@@ -64,6 +69,8 @@ export interface CachedPlanRunResult extends PlanRunResult {
  * 2. Creates a cache-aware dispatch wrapper
  * 3. Tracks cache hits/misses
  * 4. Records results after execution
+ * 5. Awaits all pending writes before returning (with timeout)
+ * 6. Invalidates entries that fail verification
  */
 export async function executePlanWithCache(
   plan: Plan,
@@ -94,6 +101,7 @@ export async function executePlanWithCache(
       bypasses: 0,
       writeEnabled: false,
       stepKeys: new Map(),
+      falseHits: 0,
     };
   }
 
@@ -102,12 +110,20 @@ export async function executePlanWithCache(
   let cacheMisses = 0;
   let verifications = 0;
   let bypasses = 0;
+  let falseHits = 0;
 
   // Track which nodes to skip (cache hits)
   const skipNodes = new Set<string>();
   const skippedResults = new Map<string, NodeResult>();
-  // Track bypassed nodes (dirty working tree) - these should not be recorded
+  // Track bypassed nodes - these should not be recorded
   const bypassedNodes = new Set<string>();
+  // Track nodes being verified (to detect false hits)
+  const verifyingNodes = new Map<string, StepKey>();
+  // Track lookup results for step keys
+  const lookupResults = new Map<string, { stepKey: StepKey | null; entry?: CacheEntry }>();
+
+  // Collect all pending write promises to await before returning
+  const pendingWrites: Promise<void>[] = [];
 
   // Pre-compute cache lookups for all nodes
   const lookupPromises = new Map<string, ReturnType<typeof stepCache.lookup>>();
@@ -121,15 +137,18 @@ export async function executePlanWithCache(
       const result = await lookupPromise;
       const node = plan.nodes.get(nodeId)!;
 
+      // Store lookup result for later
+      lookupResults.set(nodeId, { stepKey: result.stepKey, entry: result.entry });
+
       if (result.bypassed) {
-        // Dirty working tree - bypass cache (no read, no write)
+        // Bypassed (dirty tree, not cacheable, etc.)
         bypasses++;
         cacheMisses++;
         bypassedNodes.add(nodeId);
         ctx.io.stdout.write(
-          formatBypassMessage(nodeId, result.bypassReason ?? "dirty working tree") + "\n",
+          formatBypassMessage(nodeId, result.bypassReason ?? "not cacheable") + "\n",
         );
-      } else if (result.hit && result.entry) {
+      } else if (result.hit && result.entry && result.stepKey) {
         // Cache hit - mark for skipping
         skipNodes.add(nodeId);
         cacheHits++;
@@ -145,10 +164,11 @@ export async function executePlanWithCache(
         ctx.io.stdout.write(
           formatCacheHitMessage(nodeId, result.stepKey, result.entry) + "\n",
         );
-      } else if (result.shouldVerify) {
-        // Verification run - don't skip but track
+      } else if (result.shouldVerify && result.stepKey) {
+        // Verification run - don't skip but track for invalidation on failure
         verifications++;
         cacheMisses++;
+        verifyingNodes.set(nodeId, result.stepKey);
         ctx.io.stdout.write(
           formatVerifyMessage(nodeId, result.stepKey) + "\n",
         );
@@ -168,30 +188,46 @@ export async function executePlanWithCache(
     : plan;
 
   // Track timing for cache recording
-  const startTimes = new Map<string, number>();
   const originalOnEvent = ctx.onEvent;
 
   // Wrap onEvent to track timing and record results
   const wrappedOnEvent = (event: PlanEvent): void => {
     originalOnEvent?.(event);
 
-    if (event.type === "node-start") {
-      startTimes.set(event.nodeId, Date.now());
-    } else if (event.type === "node-success" || event.type === "node-failure") {
+    if (event.type === "node-success" || event.type === "node-failure") {
       const node = plan.nodes.get(event.nodeId);
       if (!node) return;
 
-      // Skip recording for bypassed nodes (dirty working tree)
+      // Skip recording for bypassed nodes
       if (bypassedNodes.has(event.nodeId)) return;
 
-      const stepKey = stepCache.getStepKey(node);
+      const lookup = lookupResults.get(event.nodeId);
+      const stepKey = lookup?.stepKey ?? stepCache.getStepKey(node);
       const passed = event.type === "node-success";
       const durationMs = event.durationMs;
 
-      // Record result to cache asynchronously (pass node for eligibility check)
-      stepCache.record(stepKey, passed, durationMs, node).catch((err) => {
-        console.warn(`[cache] Failed to record ${event.nodeId}:`, err);
-      });
+      // Check if this was a verification run that failed
+      const wasVerifying = verifyingNodes.has(event.nodeId);
+      if (wasVerifying && !passed && stepKey) {
+        // Verification failed - this is a false hit!
+        // Invalidate the cached entry and emit a warning
+        falseHits++;
+        ctx.io.stderr.write(
+          `[cache] ⚠ FALSE HIT DETECTED: ${event.nodeId} failed verification, invalidating cached entry\n`,
+        );
+        const invalidatePromise = stepCache.invalidate(stepKey.key).catch((err) => {
+          console.warn(`[cache] Failed to invalidate ${event.nodeId}:`, err);
+        });
+        pendingWrites.push(invalidatePromise);
+      }
+
+      // Record result to cache (only passes, handled by record())
+      if (stepKey) {
+        const recordPromise = stepCache.record(stepKey, passed, durationMs, node).catch((err) => {
+          console.warn(`[cache] Failed to record ${event.nodeId}:`, err);
+        });
+        pendingWrites.push(recordPromise);
+      }
     }
   };
 
@@ -200,6 +236,22 @@ export async function executePlanWithCache(
     ...ctx,
     onEvent: wrappedOnEvent,
   });
+
+  // IMPORTANT: Await all pending writes before returning
+  // This ensures the CLI doesn't exit before cache entries are persisted
+  if (pendingWrites.length > 0) {
+    try {
+      await Promise.race([
+        Promise.allSettled(pendingWrites),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Write timeout")), WRITE_AWAIT_TIMEOUT_MS)
+        ),
+      ]);
+    } catch (err) {
+      // Timeout - some writes didn't complete but we shouldn't block forever
+      console.warn("[cache] Some cache writes timed out");
+    }
+  }
 
   // Merge skipped results into the final results
   const mergedResults = new Map(result.results);
@@ -216,6 +268,7 @@ export async function executePlanWithCache(
     bypasses,
     writeEnabled: stepCache.writeEnabled,
     stepKeys: stepCache.getAllStepKeys(),
+    falseHits,
   };
 }
 
