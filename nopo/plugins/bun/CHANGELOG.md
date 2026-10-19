@@ -1,5 +1,15 @@
 # @more-nopo/nopo-plugin-bun
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [1a945c3]
+- Updated dependencies [97c1cd1]
+- Updated dependencies [a626c85]
+  - @more-nopo/nopo@0.5.0
+  - @more-nopo/nopo-test-relevance@0.0.5
+
 ## 0.3.3
 
 ### Patch Changes

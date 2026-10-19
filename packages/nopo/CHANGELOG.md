@@ -1,5 +1,27 @@
 # @more-nopo/nopo
 
+## 0.5.0
+
+### Minor Changes
+
+- a626c85: Plugin hooks are cacheable only when the plugin declares them
+
+  - Replace the hard-coded hook allowlist with `cacheableHooks` on the plugin definition. Undeclared hooks always run.
+  - A declared hook is reused only when every target it serves opted in with `cache:` on its command; plan compaction records each claimed command's declaration in `meta.cacheOptIn`.
+  - `perTarget: true` keys each batch target separately. A changed target re-runs alone; the hook receives only the missed targets.
+  - Command-level `cache: { env, inputs }` now feeds the key, and batch keys include every claimed target's declarations, not only the first.
+  - Write-mode flags in delegated args (`--fix`, `-u`, ...) make a step uncacheable; extra inputs outside the repo make it uncacheable.
+  - eslint: `lintBatch` is cacheable per target.
+
+### Patch Changes
+
+- 1a945c3: The typed command selector (`test` vs `test:-integration,-cards`) no longer feeds the cache key; the resolved leaf does, so PR and merge-queue runs of the same leaf share results.
+- 97c1cd1: Cache keys cover workspace packages and work with bucket-scoped R2 tokens
+
+  - Every workspace package a target's `package.json` depends on (transitively, resolved through `node_modules` links) now feeds its cache key and dirty check, so a change to a shared package invalidates its consumers.
+  - `cache.inputs` globs skip `node_modules`.
+  - The S3 store probes availability with an object HEAD instead of HeadBucket, so bucket-scoped R2 object tokens work. A 401/403 disables the cache with a warning.
+
 ## 0.4.0
 
 ### Minor Changes

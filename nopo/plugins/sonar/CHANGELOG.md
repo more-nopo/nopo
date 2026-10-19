@@ -1,5 +1,14 @@
 # @more-nopo/nopo-plugin-sonar
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [1a945c3]
+- Updated dependencies [97c1cd1]
+- Updated dependencies [a626c85]
+  - @more-nopo/nopo@0.5.0
+
 ## 0.0.6
 
 ### Patch Changes

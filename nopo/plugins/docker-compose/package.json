@@ -1,6 +1,6 @@
 {
   "name": "@more-nopo/nopo-plugin-docker-compose",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "docker-compose": "^1.2.0",
-    "@more-nopo/nopo": "^0.4.0",
+    "@more-nopo/nopo": "^0.5.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
