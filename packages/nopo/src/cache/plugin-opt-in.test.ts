@@ -252,3 +252,24 @@ describe("plan compaction stamps per-target opt-in", () => {
   });
 });
 
+
+describe("S3 store availability probe", () => {
+  it("probes an object (not the bucket) and treats 403 as unavailable", async () => {
+    const http = await import("node:http");
+    const { S3Store } = await import("./stores/s3.ts");
+    const paths: string[] = [];
+    let status = 404;
+    const srv = http.createServer((req, res) => { paths.push(`${req.method} ${req.url}`); res.writeHead(status); res.end(); });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const port = (srv.address() as { port: number }).port;
+    const store = new S3Store({ endpoint: `http://127.0.0.1:${port}`, bucket: "b", accessKeyId: "a", secretAccessKey: "s", ttlSeconds: 60 });
+    try {
+      expect(await store.isAvailable()).toBe(true);
+      expect(paths[0]).toMatch(/^HEAD \/b\/nopo-cache\/__nopo_probe__\.json/);
+      status = 403;
+      expect(await store.isAvailable()).toBe(false);
+    } finally {
+      srv.close();
+    }
+  });
+});
