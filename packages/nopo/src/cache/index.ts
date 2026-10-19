@@ -258,6 +258,8 @@ export class StepCache {
    * - Passing results are stored
    * - Failed results invalidate any existing entry (for verification failures)
    * Skips if writes are disabled, not cacheable, or working tree is dirty.
+   * Also re-checks dirtiness AFTER the step runs to catch steps that modify
+   * their own inputs (vitest -u, --fix, codegen, etc.).
    * Returns a promise that resolves when the write completes (for awaiting).
    */
   async record(
@@ -272,9 +274,10 @@ export class StepCache {
     // Skip if writes are disabled
     if (!this.config.writeEnabled) return;
 
-    // Skip if working tree is dirty for this node
+    // Re-check dirtiness after the step runs (don't use cached result)
+    // This catches steps that modify their own inputs like vitest -u, --fix, codegen
     if (node) {
-      const eligibility = this.checkEligibility(node);
+      const eligibility = this.checkEligibilityFresh(node);
       if (!eligibility.eligible) return;
     }
 
@@ -329,7 +332,7 @@ export class StepCache {
    * Entry must have:
    * - passed === true (boolean, not truthy string like "false")
    * - key matching the requested key
-   * - not expired (based on TTL)
+   * - not expired (based on reader's TTL from createdAt, not writer's expiresAt)
    * - valid signature (if NOPO_CACHE_SIGNING_KEY is configured)
    */
   private validateEntry(entry: CacheEntry | null, expectedKey: string): boolean {
@@ -341,8 +344,17 @@ export class StepCache {
     // key must match exactly
     if (entry.key !== expectedKey) return false;
 
-    // Check expiration (enforce TTL from reader side)
-    if (new Date(entry.expiresAt) < new Date()) return false;
+    // Check expiration using reader's TTL from createdAt, not writer's expiresAt
+    // This prevents attackers from setting far-future expiry dates
+    const createdAt = Date.parse(entry.createdAt);
+    if (isNaN(createdAt)) {
+      // Invalid createdAt date - reject
+      return false;
+    }
+    const expiresAt = createdAt + this.config.ttlSeconds * 1000;
+    if (expiresAt < Date.now()) {
+      return false;
+    }
 
     // Verify signature if signing key is configured
     if (!verifyCacheEntry(entry, this.config.signingKey)) {
@@ -357,6 +369,13 @@ export class StepCache {
     const cached = this.eligibilityCache.get(node.id);
     if (cached) return cached;
 
+    const result = this.checkEligibilityFresh(node);
+    this.eligibilityCache.set(node.id, result);
+    return result;
+  }
+
+  /** Check eligibility without caching - used for post-run verification */
+  private checkEligibilityFresh(node: PlanNode): { eligible: boolean; reason?: string } {
     // Get claimed targets from batch nodes
     const payload = node.payload as { targets?: string[] } | undefined;
     const claimedTargets = payload?.targets;
@@ -368,9 +387,7 @@ export class StepCache {
       claimedTargets,
     );
 
-    const result = { eligible: eligibility.eligible, reason: eligibility.reason };
-    this.eligibilityCache.set(node.id, result);
-    return result;
+    return { eligible: eligibility.eligible, reason: eligibility.reason };
   }
 
   private computeStepKey(node: PlanNode): StepKey | null {

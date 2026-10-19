@@ -245,7 +245,9 @@ describe("PR#37 additional fixes", () => {
     };
     const p = {
       services: { entries: { api: svc(`${repo}/packages/api`) } },
-      plugins: [{ definition: { name: "eslint", sourcePath: pluginPath } }],
+      plugins: [{ definition: { name: "eslint" }, serviceConfigs: {} }],
+      pluginRefs: [{ name: "eslint", path: "./plugin.ts" }],
+      configPath: path.join(repo, "nopo.yml"),
     } as never;
 
     const c1 = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;
@@ -273,7 +275,7 @@ describe("PR#37 additional fixes", () => {
       repoRoot: repo,
       cache: cfg(),
       dispatch: { builtin: async () => {}, pluginHook: async () => {} },
-      onEvent: (e) => events.push(e),
+      onEvent: (e: { type: string; nodeId?: string }) => events.push(e),
     } as never);
     const skipEvent = events.find(e => e.type === "node-skip");
     expect(skipEvent).toBeDefined();

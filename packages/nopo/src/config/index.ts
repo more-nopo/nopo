@@ -344,6 +344,12 @@ const ServicePackageManagersSchema = z
   .array(ServicePackageManagerItemSchema)
   .optional();
 
+// Cache configuration for services
+const ServiceCacheConfigSchema = z.object({
+  env: z.array(z.string()).optional(),
+  inputs: z.array(z.string()).optional(),
+}).optional();
+
 const ServiceFileSchema = z
   .object({
     name: z.string().min(1).optional(),
@@ -379,6 +385,8 @@ const ServiceFileSchema = z
     commands: CommandsSchema,
     // Package managers: string references to project-level or inline overrides
     package_managers: ServicePackageManagersSchema,
+    // Cache configuration for this service
+    cache: ServiceCacheConfigSchema,
   })
   .passthrough();
 
@@ -799,6 +807,11 @@ export interface NormalizedService {
   pluginData?: Record<string, unknown>;
   /** Resolved package managers for this service (merged with project-level) */
   packageManagers: PackageManagerConfig[];
+  /** Cache configuration for this service (env vars and extra inputs) */
+  cache?: {
+    env?: string[];
+    inputs?: string[];
+  };
 }
 
 /**
@@ -1523,6 +1536,9 @@ function discoverServices(
       | Record<string, unknown>
       | undefined;
 
+    // Extract cache configuration
+    const cacheConfig = parsed.cache;
+
     const normalized: NormalizedService = {
       id: serviceId,
       name: parsed.name ?? serviceId,
@@ -1547,6 +1563,7 @@ function discoverServices(
       },
       pluginData,
       packageManagers,
+      cache: cacheConfig,
     };
 
     if (entries[serviceId]) {

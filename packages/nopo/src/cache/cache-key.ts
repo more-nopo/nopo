@@ -28,12 +28,13 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { glob } from "glob";
 
-import type { NormalizedProjectConfig, NormalizedService, LoadedPlugin } from "../config/index.ts";
+import type { NormalizedProjectConfig, NormalizedService } from "../config/index.ts";
+import type { LoadedPlugin, PluginReference } from "../plugin.ts";
 import type { PlanNode } from "../plan.ts";
 
 // Root-level config files that affect all targets and should be included in cache keys
@@ -62,10 +63,40 @@ const LOCKFILE_NAMES = [
 // Everything else is NOT cacheable by default
 const CACHEABLE_HANDLERS: ReadonlySet<string> = new Set([
   // Side-effect-free command execution (lint, test, typecheck)
+  // Note: command:exec is only cacheable for specific command types
   "builtin:command:exec",
 ]);
 
+// Command names that are NEVER cacheable (have side effects)
+const UNCACHEABLE_COMMANDS: ReadonlySet<string> = new Set([
+  "clean",
+  "build",
+  "compile",
+  "install",
+  "start",
+  "up",
+  "down",
+  "deploy",
+  "publish",
+  "generate",
+  "codegen",
+  "migrate",
+]);
+
+// Flags in executable that indicate write mode (never cache)
+const WRITE_MODE_FLAGS = [
+  "-u",              // vitest update snapshots
+  "--update",        // vitest update snapshots
+  "--updateSnapshot",
+  "-w",              // prettier/eslint write
+  "--write",         // prettier write
+  "--fix",           // eslint fix
+  "--fix-dry-run",   // eslint (ok to cache)
+  "--cache",         // eslint cache (side effect)
+];
+
 // Plugin hooks that are cacheable (typically lint/test operations)
+// NOTE: Plugin hooks should be opt-in per plugin, but for now use this allowlist
 const CACHEABLE_PLUGIN_HOOKS: ReadonlySet<string> = new Set([
   "lint",
   "lintBatch",
@@ -128,10 +159,15 @@ export interface CacheableCheck {
  * Container-context steps (--context container) are never cached.
  */
 export function isHandlerCacheable(node: PlanNode): CacheableCheck {
-  // Check for container context override - never cache container steps
+  // Check for container context - never cache container steps
   // Container steps execute via kubectl exec in a different environment
-  const payload = node.payload as { contextOverride?: string } | undefined;
-  if (payload?.contextOverride === "container") {
+  // Check both --context override and task.context from nopo.yml
+  const payload = node.payload as {
+    contextOverride?: string;
+    task?: { context?: string; command?: string; executable?: string };
+    commandName?: string;
+  } | undefined;
+  if (payload?.contextOverride === "container" || payload?.task?.context === "container") {
     return {
       cacheable: false,
       reason: "container context steps cannot be cached",
@@ -141,6 +177,34 @@ export function isHandlerCacheable(node: PlanNode): CacheableCheck {
   if (node.handler.kind === "builtin") {
     const handlerKey = `builtin:${node.handler.name}`;
     if (CACHEABLE_HANDLERS.has(handlerKey)) {
+      // For command:exec, check if the specific command is cacheable
+      if (node.handler.name === "command:exec") {
+        // task.command is the actual command name from nopo.yml
+        const commandName = payload?.task?.command ?? payload?.commandName ?? "";
+        const executable = payload?.task?.executable ?? "";
+
+        // Check for uncacheable command names
+        if (UNCACHEABLE_COMMANDS.has(commandName.toLowerCase())) {
+          return {
+            cacheable: false,
+            reason: `command '${commandName}' has side effects`,
+          };
+        }
+
+        // Check for write-mode flags in executable
+        for (const flag of WRITE_MODE_FLAGS) {
+          // Skip --fix-dry-run which is safe
+          if (flag === "--fix-dry-run") continue;
+          // Match flag as word boundary (not part of another flag)
+          const flagPattern = new RegExp(`(^|\\s)${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
+          if (flagPattern.test(executable)) {
+            return {
+              cacheable: false,
+              reason: `executable contains write-mode flag '${flag}'`,
+            };
+          }
+        }
+      }
       return { cacheable: true };
     }
     return {
@@ -429,11 +493,15 @@ export function getRuntimeVersion(): string {
 
 /**
  * Get nopo package version for cache key.
+ * Works in both CommonJS and ESM environments.
  */
 export function getNopoVersion(): string {
   try {
     // Try to read version from package.json in the nopo package
-    const pkgPath = path.resolve(__dirname, "../../package.json");
+    // Use import.meta.url for ESM compatibility instead of __dirname
+    const currentFileUrl = import.meta.url;
+    const currentDir = path.dirname(new URL(currentFileUrl).pathname);
+    const pkgPath = path.resolve(currentDir, "../../package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
     return pkg.version ?? "unknown";
   } catch {
@@ -581,7 +649,7 @@ export function buildStepKeyInputs(
 
   // Collect plugin source hashes for plugin hooks
   const pluginHashes = pluginName
-    ? collectPluginHashes(project.plugins, pluginName)
+    ? collectPluginHashes(project, pluginName)
     : {};
 
   // Collect extra input hashes from service cache.inputs config
@@ -622,23 +690,23 @@ export function buildStepKeyInputs(
  * for a service. Includes default vars plus service-declared cache.env.
  *
  * Default always-included env vars that affect execution:
- * - CI (affects some behaviors)
  * - NODE_ENV (affects builds)
+ *
+ * Note: CI is NOT included by default so laptop runs can hit CI-written entries.
+ * Services that need CI-specific behavior should declare it in cache.env.
  */
-const DEFAULT_ENV_INPUTS = ["CI", "NODE_ENV"];
+const DEFAULT_ENV_INPUTS = ["NODE_ENV"];
 
 /**
- * Get service-level cache configuration from pluginData or direct cache field.
+ * Get service-level cache configuration from the service's cache field.
  * Services can declare cache.env and cache.inputs in their nopo.yml.
  */
 export function getServiceCacheConfig(
   service: NormalizedService | undefined,
 ): ServiceCacheConfig | undefined {
   if (!service) return undefined;
-  // Check for cache config in service (could be under pluginData.cache or direct)
-  const cacheConfig = (service as { cache?: ServiceCacheConfig }).cache ??
-    (service.pluginData?.cache as ServiceCacheConfig | undefined);
-  return cacheConfig;
+  // Cache config is directly on the service after normalization
+  return service.cache;
 }
 
 export function getDeclaredEnvInputs(
@@ -706,27 +774,35 @@ export function collectExtraInputHashes(
  * Collect hashes for plugin source files.
  * For plugin hooks, includes the plugin's source file hash to invalidate
  * cache when plugin code changes.
+ *
+ * Uses pluginRefs from project config to find plugin paths.
  */
 export function collectPluginHashes(
-  plugins: LoadedPlugin[],
+  project: NormalizedProjectConfig,
   pluginName?: string,
 ): Record<string, string> {
   const hashes: Record<string, string> = {};
 
-  // If a specific plugin is requested, only hash that one
-  const pluginsToHash = pluginName
-    ? plugins.filter(p => p.definition.name === pluginName)
-    : plugins;
+  // No plugin refs = no hashes to collect
+  if (!project.pluginRefs || project.pluginRefs.length === 0) {
+    return hashes;
+  }
 
-  for (const plugin of pluginsToHash) {
-    // Hash the plugin's source file if available
-    const sourcePath = plugin.definition.sourcePath;
-    if (sourcePath) {
-      const hash = hashFileContent(sourcePath);
+  // Find plugin refs that match the requested plugin name
+  const refsToHash = pluginName
+    ? project.pluginRefs.filter(ref => ref.name === pluginName)
+    : project.pluginRefs;
+
+  for (const ref of refsToHash) {
+    // Hash the plugin's source file if it has a path
+    if (ref.path && project.configPath) {
+      const resolvedPath = path.resolve(path.dirname(project.configPath), ref.path);
+      const hash = hashFileContent(resolvedPath);
       if (hash) {
-        hashes[plugin.definition.name] = hash;
+        hashes[ref.name] = hash;
       }
     }
+    // TODO: For workspace plugins (@more-nopo/nopo-plugin-*), hash the package directory
   }
 
   return hashes;
@@ -982,6 +1058,7 @@ export function signCacheEntry(content: string, signingKey: string): string {
 
 /**
  * Verify HMAC signature for a cache entry.
+ * Uses crypto.timingSafeEqual to prevent timing attacks.
  * Returns true if signature is valid, false otherwise.
  */
 export function verifyCacheEntrySignature(
@@ -992,9 +1069,9 @@ export function verifyCacheEntrySignature(
   const expectedSignature = signCacheEntry(content, signingKey);
   // Use timing-safe comparison to prevent timing attacks
   if (signature.length !== expectedSignature.length) return false;
-  let result = 0;
-  for (let i = 0; i < signature.length; i++) {
-    result |= signature.charCodeAt(i) ^ expectedSignature.charCodeAt(i);
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+  } catch {
+    return false;
   }
-  return result === 0;
 }

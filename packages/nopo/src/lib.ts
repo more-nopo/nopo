@@ -1470,10 +1470,14 @@ export class Runner {
     // Cache configuration from CLI flags and environment
     const cacheEnabled = args.get<boolean>("cache") ?? false;
     const noCache = args.get<boolean>("no-cache") ?? false;
-    const cacheSampling = args.get<number>("cache-sampling") ?? 0;
+    const cacheSamplingArg = args.get<number>("cache-sampling");
 
     // Determine if we should use caching
-    const shouldUseCache = (cacheEnabled || runnerForScript.io.env.NOPO_CACHE === "1") && !noCache;
+    // Accept NOPO_CACHE=1 or NOPO_CACHE=true for env-based enabling
+    const envCacheEnabled =
+      runnerForScript.io.env.NOPO_CACHE === "1" ||
+      runnerForScript.io.env.NOPO_CACHE === "true";
+    const shouldUseCache = (cacheEnabled || envCacheEnabled) && !noCache;
 
     let result: import("./plan-runner.ts").PlanRunResult;
 
@@ -1484,7 +1488,8 @@ export class Runner {
 
       const cacheConfig = loadCacheConfig(runnerForScript.io.env, {
         enabled: true,
-        samplingPercent: cacheSampling,
+        // Only override samplingPercent if explicitly set via CLI flag
+        ...(cacheSamplingArg !== undefined ? { samplingPercent: cacheSamplingArg } : {}),
       });
 
       result = await executePlanWithCache(plan, {
