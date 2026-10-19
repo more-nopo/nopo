@@ -20,13 +20,13 @@ A step's cache key is a SHA-256 hash of:
 - **Target tree hashes**: Git tree hash of the target and all its dependencies (transitive)
 - **Root config hashes**: SHA-256 of root-level config files (tsconfig*.json, eslint.config.*, .nvmrc, etc.)
 - **Lockfile hashes**: SHA-256 of all lockfiles (bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml)
-- **Plugin source hashes**: For plugin hooks, SHA-256 of the plugin's source file
+- **Plugin source hashes**: For plugin hooks, SHA-256 of the plugin's source file (path-referenced plugins; package plugins are covered by the lockfile hash)
 - **Runtime version**: Node.js/Bun version
 - **nopo version**: The nopo package version
 - **Command/handler**: The command being executed
 - **Payload**: Command arguments and configuration
-- **Declared env inputs**: Values of environment variables that affect the step (default: CI, NODE_ENV; plus service-declared cache.env)
-- **Extra input hashes**: SHA-256 of files declared in service cache.inputs
+- **Declared env inputs**: Values of environment variables that affect the step (default: NODE_ENV; plus `cache.env` from the service and from the command)
+- **Extra input hashes**: SHA-256 of files matched by `cache.inputs` on the service and on the command
 
 The key design is hierarchical:
 
@@ -36,7 +36,28 @@ The key design is hierarchical:
 
 ## Enabling the Cache
 
-The cache is **opt-in** (disabled by default) to ensure existing behavior is unchanged.
+The cache is **opt-in** at two levels, and both must be on:
+
+1. **Per command** in `nopo.yml`: only commands that declare `cache:` are ever cached.
+2. **Per run**: `--cache` or `NOPO_CACHE=1` turns lookups on for an invocation.
+
+### Opting a command in
+
+```yaml
+# packages/api/nopo.yml
+commands:
+  test:
+    command: vitest run
+    cache: true
+  lint:
+    plugin: eslint
+    cache:
+      env: [LINT_STRICT]          # values of these vars join the key
+      inputs: [".generated/**"]   # globs relative to the service root; must stay inside the repo
+```
+
+Even with `cache:`, a step is never cached when it runs in container context or its
+command or delegated args contain a write-mode flag (`--fix`, `-u`, `--write`, ...).
 
 ### Via CLI Flag
 
@@ -60,14 +81,14 @@ NOPO_CACHE=1 nopo test
 
 ### Cache Write Control
 
-By default, cache writes are **enabled only in CI environments** (when `CI=true`). This prevents local or agent runs from accidentally polluting the cache with unverified results.
+Cache writes are **off by default**. Enable them only on trusted jobs (push to main, merge queue) with `NOPO_CACHE_WRITE=1`. PR jobs, laptops and agents stay read-only, so they cannot poison the cache.
 
 ```bash
-# Explicitly enable writes (e.g., for local testing)
+# Trusted CI job
 NOPO_CACHE_WRITE=1 nopo test --cache
 
-# Disable writes (read-only mode)
-NOPO_CACHE_WRITE=0 nopo test --cache
+# Everyone else: read-only (default)
+nopo test --cache
 ```
 
 In read-only mode, the cache still provides hits but won't record new passes. This is useful for laptops and agents that should benefit from CI-populated cache without writing to it.
@@ -176,9 +197,9 @@ By default, the cache considers:
 - Target directory files (via git tree hash)
 - All lockfiles in repo root
 - Root-level config files (tsconfig*.json, eslint.config.*, etc.)
-- `CI` and `NODE_ENV` environment variables
+- The `NODE_ENV` environment variable
 
-If your step depends on other inputs, declare them in your service's `nopo.yml`:
+If your step depends on other inputs, declare them on the command (see above) or for every command of a service in its `nopo.yml`:
 
 ```yaml
 # packages/api/nopo.yml
@@ -198,37 +219,68 @@ cache:
 
 **Important**: Files matched by `.gitignore` are not tracked by git tree hashes. If your step depends on gitignored files, you must declare them in `cache.inputs` for the cache to work correctly.
 
-## HMAC Signing for Cache Integrity
+## Ed25519 Signing for Cache Integrity
 
-To prevent cache poisoning from untrusted writers, you can enable HMAC signing:
+Writers sign entries with a private key; readers verify with the public key. When
+`NOPO_CACHE_SIGNING_PUBLIC_KEY` is set, unsigned or badly signed entries are rejected, and
+a writer without `NOPO_CACHE_SIGNING_PRIVATE_KEY` skips the write.
 
 ```bash
-# Set signing key (should be a secret in CI)
-export NOPO_CACHE_SIGNING_KEY=your-secret-signing-key
+openssl genpkey -algorithm Ed25519 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
 ```
 
-When a signing key is configured:
-- **Write**: Cache entries are signed with the key
-- **Read**: Unsigned entries or entries with invalid signatures are rejected
-
-**Recommendation**: Give write credentials only to trusted CI events (push to main, merge_group). PR jobs should be read-only (no write credentials or `NOPO_CACHE_WRITE=0`).
+Keys are PEM, or base64 DER (PKCS8 private, SPKI public).
 
 ```yaml
-# GitHub Actions example with signing
+# GitHub Actions: every job reads and verifies; only trusted events write
+env:
+  NOPO_CACHE: "1"
+  NOPO_CACHE_SIGNING_PUBLIC_KEY: ${{ vars.NOPO_CACHE_SIGNING_PUBLIC_KEY }}
 jobs:
-  test-pr:
-    # PR jobs: read-only, no signing key needed
+  test:
     env:
-      NOPO_CACHE_WRITE: "0"
-    # ...
-
-  test-main:
-    if: github.ref == 'refs/heads/main'
-    # Main branch: write enabled with signing
-    env:
-      NOPO_CACHE_SIGNING_KEY: ${{ secrets.CACHE_SIGNING_KEY }}
-    # ...
+      NOPO_CACHE_WRITE: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && '1' || '0' }}
+      NOPO_CACHE_SIGNING_PRIVATE_KEY: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && secrets.NOPO_CACHE_SIGNING_PRIVATE_KEY || '' }}
 ```
+
+Secrets are not passed to workflows triggered from forks, so fork PRs can never sign.
+
+## Plugin Hooks
+
+Plugin batch hooks (for example eslint's `lintBatch`, which runs every `plugin: eslint`
+command in one coordinator) are **not cacheable unless the plugin declares them**:
+
+```ts
+const plugin: NopoPluginFactory = () => ({
+  name: "eslint",
+  hooks: { lintBatch: async (ctx) => { /* ... */ } },
+  cacheableHooks: {
+    lintBatch: { perTarget: true },
+  },
+});
+```
+
+A declared hook is still reused only when every target it serves opted in with `cache:`
+on its command. Plan compaction records each claimed command's declaration on the batch
+node (`meta.cacheOptIn`), and their `env`/`inputs` all feed the key.
+
+Declare a hook only when it is side-effect free and its result depends only on the key
+inputs.
+
+### Per-target batch keys
+
+With `perTarget: true`, each target in `payload.targets` gets its own key, covering that
+target and its transitive deps. On a run:
+
+- every target hits: the batch is skipped
+- some targets hit: the hook runs with `payload.targets` narrowed to the misses
+- targets that did not opt in, or whose tree is dirty, always run and are never recorded
+- a passing batch records each target it ran; a failing batch records nothing
+
+Without `perTarget`, the batch shares one key and any changed target re-runs all of them.
+Set `perTarget` only when the hook accepts any subset of targets and one target's result
+does not depend on its batch peers.
 
 ## Forcing a Full Run
 

@@ -43,7 +43,7 @@ import path from "node:path";
 import { glob } from "glob";
 
 import type { CommandCacheConfig, NormalizedProjectConfig, NormalizedService } from "../config/index.ts";
-import type { LoadedPlugin, PluginReference } from "../plugin.ts";
+import type { PluginHookCacheSpec } from "../plugin.ts";
 import type { PlanNode } from "../plan.ts";
 
 // Root-level config files that affect all targets and should be included in cache keys
@@ -87,18 +87,173 @@ const WRITE_MODE_FLAGS = [
   "--cache",         // eslint cache (side effect: writes .eslintcache)
 ];
 
-// Plugin hooks that are cacheable when explicitly declared by the plugin
-// NOTE: This is a temporary allowlist. In the future, plugins should declare
-// cacheable: true per hook in their definition. For now, these are the hooks
-// that are known to be side-effect-free.
-const CACHEABLE_PLUGIN_HOOKS: ReadonlySet<string> = new Set([
-  "lint",
-  "lintBatch",
-  "test",
-  "testBatch",
-  "typecheck",
-  "typecheckBatch",
-]);
+/** First write-mode flag in `args`, matched as a whole word or `--flag=value`. */
+function findWriteModeFlag(args: readonly string[]): string | undefined {
+  for (const arg of args) {
+    for (const flag of WRITE_MODE_FLAGS) {
+      // --fix-dry-run is safe (dry run doesn't write)
+      if (flag === "--fix-dry-run") continue;
+      if (arg === flag || arg.startsWith(`${flag}=`)) return flag;
+    }
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** String args a node forwards to its tool: `payload.args` (plugin batches) and
+ * `payload.task.args` (delegated commands). */
+function getPayloadArgs(node: PlanNode): string[] {
+  const out: string[] = [];
+  const payload = node.payload;
+  if (!isRecord(payload)) return out;
+  const collect = (v: unknown) => {
+    if (Array.isArray(v)) for (const a of v) if (typeof a === "string") out.push(a);
+  };
+  collect(payload.args);
+  if (isRecord(payload.task)) collect(payload.task.args);
+  return out;
+}
+
+/** Targets a node runs for: `payload.targets` for batch nodes, else `node.target`. */
+export function getNodeTargets(node: PlanNode): string[] {
+  const payload = node.payload;
+  if (isRecord(payload) && Array.isArray(payload.targets)) {
+    return payload.targets.filter((t): t is string => typeof t === "string");
+  }
+  return node.target ? [node.target] : [];
+}
+
+/** Per-target `cache:` declarations for a node. Batch nodes carry them in
+ * `meta.cacheOptIn` (stamped by plan compaction); a single command node carries its own in
+ * `payload.task.cache`. */
+export function getTargetCacheOptIn(node: PlanNode): Record<string, CommandCacheConfig | null> {
+  const out: Record<string, CommandCacheConfig | null> = {};
+  const meta = node.meta?.cacheOptIn;
+  if (isRecord(meta)) {
+    for (const [target, value] of Object.entries(meta)) {
+      out[target] = value === true || isRecord(value) ? (value as CommandCacheConfig) : null;
+    }
+  }
+  const payload = node.payload;
+  if (node.target && isRecord(payload) && isRecord(payload.task)) {
+    const cache = payload.task.cache;
+    if (cache === true || isRecord(cache)) {
+      out[node.target] ??= cache as CommandCacheConfig;
+    }
+  }
+  return out;
+}
+
+/** The plugin's cache declaration for `hook`, or undefined when it does not declare one. */
+export function getPluginHookCacheSpec(
+  project: NormalizedProjectConfig | undefined,
+  pluginName: string,
+  hook: string,
+): PluginHookCacheSpec | undefined {
+  const loaded = project?.plugins?.find((p) => p.definition.name === pluginName);
+  const declared = loaded?.definition.cacheableHooks;
+  if (!declared || !Object.prototype.hasOwnProperty.call(declared, hook)) return undefined;
+  return declared[hook];
+}
+
+/** One target's slice of a per-target batch. */
+export interface BatchTargetSlice {
+  target: string;
+  /** Synthetic single-target node used only to compute the key and check dirtiness. */
+  node: PlanNode;
+}
+
+/**
+ * Split a batch node into per-target slices when its plugin declares the hook
+ * `perTarget`. Returns null when the node should be keyed as a whole. Each slice's key
+ * covers only that target (and its transitive deps), so one changed target no longer
+ * misses the whole batch.
+ */
+export function splitBatchNode(
+  node: PlanNode,
+  project: NormalizedProjectConfig | undefined,
+): BatchTargetSlice[] | null {
+  if (node.handler.kind !== "plugin-hook") return null;
+  const spec = getPluginHookCacheSpec(project, node.handler.plugin, node.handler.hook);
+  if (!spec?.perTarget) return null;
+  const payload = node.payload;
+  if (!isRecord(payload) || !Array.isArray(payload.targets)) return null;
+  const targets = getNodeTargets(node);
+  if (targets.length === 0) return null;
+  const optIn = getTargetCacheOptIn(node);
+  return [...new Set(targets)].map((target) => ({
+    target,
+    node: {
+      id: `${node.id}#${target}`,
+      handler: node.handler,
+      needs: [],
+      payload: { ...payload, targets: [target] },
+      meta: { cacheOptIn: { [target]: optIn[target] ?? null } },
+    },
+  }));
+}
+
+/** A declared extra input: a glob resolved against `root`. */
+export interface DeclaredInput {
+  root: string;
+  pattern: string;
+}
+
+/** Env var names and extra input globs that feed a node's key, gathered from the
+ * service-level `cache:` blocks of every target the node runs for and from the
+ * command-level `cache: { env, inputs }` each of those targets declared. */
+export function resolveCacheDeclarations(
+  node: PlanNode,
+  project: NormalizedProjectConfig,
+): { env: string[]; inputs: DeclaredInput[] } {
+  const env = new Set<string>(DEFAULT_ENV_INPUTS);
+  const inputs: DeclaredInput[] = [];
+  const add = (config: { env?: string[]; inputs?: string[] } | undefined, root: string) => {
+    for (const name of config?.env ?? []) env.add(name);
+    for (const pattern of config?.inputs ?? []) inputs.push({ root, pattern });
+  };
+  const optIn = getTargetCacheOptIn(node);
+  for (const target of getNodeTargets(node)) {
+    const service = project.services.entries[target];
+    if (!service) continue;
+    add(service.cache, service.paths.root);
+    const declared = optIn[target];
+    if (declared && declared !== true) add(declared, service.paths.root);
+  }
+  return { env: [...env].sort(), inputs };
+}
+
+/** Hash declared input globs. Null (uncacheable) if a match cannot be read or resolves
+ * outside the repository. */
+export function collectDeclaredInputHashes(
+  inputs: readonly DeclaredInput[],
+  repoRoot: string,
+): Record<string, string> | null {
+  const hashes: Record<string, string> = {};
+  for (const { root, pattern } of inputs) {
+    let matches: string[];
+    try {
+      matches = glob.sync(pattern, { cwd: root, nodir: true, absolute: false, dot: true });
+    } catch {
+      return null;
+    }
+    if (matches.length === 0) {
+      console.warn(`[cache] Extra input pattern "${pattern}" matched no files in ${root}`);
+    }
+    for (const match of matches) {
+      const filePath = path.join(root, match);
+      const relPath = path.relative(repoRoot, filePath);
+      if (relPath.startsWith("..") || path.isAbsolute(relPath)) return null;
+      const hash = hashFileContent(filePath);
+      if (hash === null) return null;
+      hashes[relPath] = hash;
+    }
+  }
+  return hashes;
+}
 
 /** Cache configuration declared in service nopo.yml */
 export interface ServiceCacheConfig {
@@ -158,10 +313,16 @@ export interface CacheableCheck {
  * - Write-mode flags (--fix, -u, --write, etc.) prevent caching
  *
  * Plugin hooks are cacheable only if:
- * 1. The hook is in the CACHEABLE_PLUGIN_HOOKS allowlist (temporary)
- * 2. In the future: the plugin declares cacheable: true per hook
+ * 1. The plugin lists the hook in `cacheableHooks` (default: not cacheable), and
+ * 2. Every target the hook serves opted in with `cache:` on its command. Batch nodes carry
+ *    that per-target opt-in in `meta.cacheOptIn` (stamped by plan compaction).
+ *
+ * `project` is needed to look up plugin declarations; without it no plugin hook is cacheable.
  */
-export function isHandlerCacheable(node: PlanNode): CacheableCheck {
+export function isHandlerCacheable(
+  node: PlanNode,
+  project?: NormalizedProjectConfig,
+): CacheableCheck {
   // Check for container context - never cache container steps
   // Container steps execute via kubectl exec in a different environment
   // Check both --context override and task.context from nopo.yml
@@ -208,19 +369,16 @@ export function isHandlerCacheable(node: PlanNode): CacheableCheck {
 
       const executable = payload?.task?.executable ?? "";
 
-      // Extra guard: check for write-mode flags in executable
+      // Extra guard: check for write-mode flags in executable and delegated args.
       // Even with cache: true, these flags indicate the command modifies files
-      for (const flag of WRITE_MODE_FLAGS) {
-        // Skip --fix-dry-run which is safe (dry run doesn't write)
-        if (flag === "--fix-dry-run") continue;
-        // Match flag as word boundary (not part of another flag)
-        const flagPattern = new RegExp(`(^|\\s)${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
-        if (flagPattern.test(executable)) {
-          return {
-            cacheable: false,
-            reason: `executable contains write-mode flag '${flag}'`,
-          };
-        }
+      const flag =
+        findWriteModeFlag(executable.split(/\s+/)) ??
+        findWriteModeFlag(getPayloadArgs(node));
+      if (flag) {
+        return {
+          cacheable: false,
+          reason: `executable contains write-mode flag '${flag}'`,
+        };
       }
 
       return { cacheable: true };
@@ -230,15 +388,36 @@ export function isHandlerCacheable(node: PlanNode): CacheableCheck {
   }
 
   if (node.handler.kind === "plugin-hook") {
-    // Plugin hooks: only cacheable if the hook is in the allowlist
-    // TODO: In the future, plugins should declare cacheable: true per hook
-    if (CACHEABLE_PLUGIN_HOOKS.has(node.handler.hook)) {
-      return { cacheable: true };
+    const { plugin, hook } = node.handler;
+    const spec = getPluginHookCacheSpec(project, plugin, hook);
+    if (!spec) {
+      return {
+        cacheable: false,
+        reason: `plugin ${plugin} does not declare hook ${hook} cacheable`,
+      };
     }
-    return {
-      cacheable: false,
-      reason: `plugin hook ${node.handler.plugin}:${node.handler.hook} is not cacheable`,
-    };
+
+    const writeFlag = findWriteModeFlag(getPayloadArgs(node));
+    if (writeFlag) {
+      return {
+        cacheable: false,
+        reason: `plugin args contain write-mode flag '${writeFlag}'`,
+      };
+    }
+
+    const optIn = getTargetCacheOptIn(node);
+    const targets = getNodeTargets(node);
+    if (targets.length === 0) {
+      return { cacheable: false, reason: "no target or claimed targets" };
+    }
+    const missing = targets.filter((t) => optIn[t] === undefined || optIn[t] === null);
+    if (missing.length > 0) {
+      return {
+        cacheable: false,
+        reason: `command has no cache: true declaration for ${missing.join(", ")}`,
+      };
+    }
+    return { cacheable: true };
   }
 
   return { cacheable: false, reason: "unknown handler kind" };
@@ -610,7 +789,7 @@ export function buildStepKeyInputs(
   treeHashCache?: TreeHashCache,
 ): BuildStepKeyResult {
   // Check if handler is cacheable (side-effect-free, not container context)
-  const cacheableCheck = isHandlerCacheable(node);
+  const cacheableCheck = isHandlerCacheable(node, project);
   if (!cacheableCheck.cacheable) {
     return { inputs: null, reason: cacheableCheck.reason };
   }
@@ -627,7 +806,6 @@ export function buildStepKeyInputs(
 
   // Collect tree hashes for target and dependencies (or claimed targets for batch nodes)
   let treeHashes: Record<string, string> | null;
-  let service: NormalizedService | undefined;
 
   // Check if this is a batch node with claimed targets
   const payload = node.payload as { targets?: string[] } | undefined;
@@ -636,12 +814,9 @@ export function buildStepKeyInputs(
   if (claimedTargets && claimedTargets.length > 0) {
     // Batch node: collect tree hashes for all claimed targets
     treeHashes = collectTreeHashesForTargets(project, claimedTargets, repoRoot, treeHashCache);
-    // For batch nodes, use the first claimed target's service for cache config
-    service = project.services.entries[claimedTargets[0]!];
   } else if (node.target) {
     // Regular node with a target
     treeHashes = collectTreeHashes(project, node.target, repoRoot, new Set(), treeHashCache);
-    service = project.services.entries[node.target];
   } else {
     // No target and no claimed targets - can't compute meaningful key
     return { inputs: null, reason: "no target or claimed targets" };
@@ -670,15 +845,17 @@ export function buildStepKeyInputs(
     ? collectPluginHashes(project, pluginName)
     : {};
 
-  // Collect extra input hashes from service cache.inputs config
-  const extraInputHashes = collectExtraInputHashes(service, repoRoot);
+  // Extra inputs and env from the service-level and command-level cache blocks of every
+  // target this node runs for (batches: all claimed targets, not just the first)
+  const declarations = resolveCacheDeclarations(node, project);
+  const extraInputHashes = collectDeclaredInputHashes(declarations.inputs, repoRoot);
   if (extraInputHashes === null) {
-    return { inputs: null, reason: "extra input file hash unavailable (gitignored inputs must exist)" };
+    return { inputs: null, reason: "extra input file hash unavailable (inputs must exist inside the repo)" };
   }
 
-  // Collect declared env inputs (default + service-declared cache.env)
+  // Collect declared env inputs (default + service-declared + command-declared cache.env)
   const envInputs: Record<string, string> = {};
-  for (const name of declaredEnvInputs) {
+  for (const name of new Set([...declaredEnvInputs, ...declarations.env])) {
     const value = env[name];
     if (value !== undefined) {
       envInputs[name] = value;

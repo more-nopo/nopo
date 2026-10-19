@@ -162,6 +162,12 @@ export function compactPlan(plan: Plan, ctx: CompactionContext): Plan {
       ...(result.meta ?? {}),
       batchOf: claimed.map((n) => n.id),
     };
+    // Only stamped when some claimed command opted in, so batches that never cache keep
+    // their meta unchanged. Absent means "no target opted in".
+    const cacheOptIn = collectCacheOptIn(claimed);
+    if (Object.values(cacheOptIn).some((v) => v !== null)) {
+      mergedMeta.cacheOptIn = cacheOptIn;
+    }
 
     const batchNode: PlanNode = {
       id: result.id,
@@ -209,6 +215,40 @@ export function compactPlan(plan: Plan, ctx: CompactionContext): Plan {
 
 // ---------------------------------------------------------------------------
 // internal helpers
+
+/** Per-target `cache:` declaration of each claimed node, keyed by target id. A claimed node
+ * that is not a command, or whose command did not opt in, maps to `null`, so the step cache
+ * can tell which targets of a batch may be reused. If one target is claimed twice and the
+ * declarations disagree, `null` wins.
+ */
+function collectCacheOptIn(
+  claimed: readonly PlanNode[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const node of claimed) {
+    const task = isRecord(node.payload) ? node.payload.task : undefined;
+    const target =
+      node.target ??
+      (isRecord(task) && typeof task.service === "string"
+        ? task.service
+        : undefined);
+    if (target === undefined) continue;
+    const declared =
+      isRecord(task) && task.cache !== undefined && task.cache !== null
+        ? task.cache
+        : null;
+    if (!(target in out)) {
+      out[target] = declared;
+    } else if (JSON.stringify(out[target]) !== JSON.stringify(declared)) {
+      out[target] = null;
+    }
+  }
+  return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
  * Copy `node` with claimed need ids rewritten to their batch id.

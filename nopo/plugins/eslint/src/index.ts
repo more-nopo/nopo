@@ -741,6 +741,11 @@ const eslintPlugin: NopoPluginFactory = (raw) => {
         );
       },
     },
+    // Linting only reads source, and each target's result depends on its own files and
+    // config, so the step cache may reuse it per target. A changed target re-lints alone.
+    cacheableHooks: {
+      lintBatch: { perTarget: true },
+    },
     batches: [
       {
         claims: (node) => isEslintCommandExecNode(node),

@@ -259,10 +259,11 @@ describe("PR#37 additional fixes", () => {
       handler: { kind: "plugin-hook", plugin: "eslint", hook: "lint" },
       needs: [],
       target: "api",
+      meta: { cacheOptIn: { api: true } },
     };
     const p = {
       services: { entries: { api: svc(`${repo}/packages/api`) } },
-      plugins: [{ definition: { name: "eslint" }, serviceConfigs: {} }],
+      plugins: [{ definition: { name: "eslint", cacheableHooks: { lint: {} } }, serviceConfigs: {} }],
       pluginRefs: [{ name: "eslint", path: "./plugin.ts" }],
       configPath: path.join(repo, "nopo.yml"),
     } as never;
