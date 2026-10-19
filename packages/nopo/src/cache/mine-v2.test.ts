@@ -58,11 +58,11 @@ describe("PR#37 second pass", () => {
     // Include pluginRefs with path so plugin source hash can be collected
     const p = {
       services: { entries: { api: svc(`${repo}/packages/api`) } },
-      plugins: [{ definition: { name: "eslint", hooks: {} }, serviceConfigs: {} }],
+      plugins: [{ definition: { name: "eslint", hooks: {}, cacheableHooks: { lintBatch: {} } }, serviceConfigs: {} }],
       pluginRefs: [{ name: "eslint", path: "./plugin.ts" }],
       configPath: path.join(repo, "nopo.yml"),
     } as never;
-    const node: PlanNode = { id: "eslint:batch", handler: { kind: "plugin-hook", plugin: "eslint", hook: "lintBatch" }, needs: [], payload: { targets: ["api"] } };
+    const node: PlanNode = { id: "eslint:batch", handler: { kind: "plugin-hook", plugin: "eslint", hook: "lintBatch" }, needs: [], payload: { targets: ["api"] }, meta: { cacheOptIn: { api: true } } };
     const k1 = computeStepKey(buildStepKeyInputs(node, p, repo, [], {}).inputs!).key;
     fs.writeFileSync(path.join(repo, "plugin.ts"), "export default 2; // rule now errors\n"); commit("plugin2");
     const k2 = computeStepKey(buildStepKeyInputs(node, p, repo, [], {}).inputs!).key;

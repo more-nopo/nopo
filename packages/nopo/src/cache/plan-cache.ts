@@ -30,6 +30,76 @@ import {
   StepCache,
   type StepKey,
 } from "./index.ts";
+import type { BatchTargetSlice } from "./cache-key.ts";
+
+/** A batch target that must run, with the key to record if the batch passes. */
+interface BatchSliceRun {
+  slice: BatchTargetSlice;
+  stepKey: StepKey;
+  /** Re-running a cached pass for sampling verification */
+  verifying: boolean;
+  /** Opted in, clean tree: record on pass */
+  recordable: boolean;
+}
+
+interface BatchLookupOutcome {
+  /** Targets served from cache */
+  hits: string[];
+  /** Targets that must run, in payload order */
+  runTargets: string[];
+  /** Keyed targets that must run (subset of runTargets) */
+  run: BatchSliceRun[];
+  /** Targets that run without a cache read or write */
+  bypassed: Array<{ target: string; reason: string }>;
+}
+
+async function lookupBatchSlices(
+  stepCache: StepCache,
+  node: PlanNode,
+  slices: readonly BatchTargetSlice[],
+): Promise<BatchLookupOutcome> {
+  const outcome: BatchLookupOutcome = { hits: [], runTargets: [], run: [], bypassed: [] };
+  for (const slice of slices) {
+    let result: Awaited<ReturnType<StepCache["lookup"]>>;
+    try {
+      result = await stepCache.lookup(slice.node);
+    } catch (err) {
+      console.warn(`[cache] Lookup failed for ${node.id}#${slice.target}:`, err);
+      outcome.runTargets.push(slice.target);
+      continue;
+    }
+    if (result.hit && result.entry && result.stepKey) {
+      outcome.hits.push(slice.target);
+      continue;
+    }
+    outcome.runTargets.push(slice.target);
+    if (result.bypassed || !result.stepKey) {
+      outcome.bypassed.push({ target: slice.target, reason: result.bypassReason ?? "not cacheable" });
+      continue;
+    }
+    outcome.run.push({
+      slice,
+      stepKey: result.stepKey,
+      verifying: result.shouldVerify,
+      recordable: true,
+    });
+  }
+  return outcome;
+}
+
+/** Rewrite `payload.targets` of partially-hit batch nodes to the targets that must run. */
+function narrowBatchTargets(plan: Plan, narrowed: ReadonlyMap<string, string[]>): Plan {
+  const nodes = new Map<string, PlanNode>();
+  for (const [id, node] of plan.nodes) {
+    const targets = narrowed.get(id);
+    if (targets && typeof node.payload === "object" && node.payload !== null) {
+      nodes.set(id, { ...node, payload: { ...(node.payload as Record<string, unknown>), targets } });
+    } else {
+      nodes.set(id, node);
+    }
+  }
+  return { nodes, maxConcurrency: plan.maxConcurrency };
+}
 
 /** Extended plan context with caching support */
 export interface CachedPlanContext extends PlanContext {
@@ -126,9 +196,42 @@ export async function executePlanWithCache(
   // Collect all pending write promises to await before returning
   const pendingWrites: Promise<void>[] = [];
 
+  // Per-target batch slices: nodeId -> slices that must run and may be recorded
+  const batchSlices = new Map<string, BatchSliceRun[]>();
+  // Batch nodes whose payload.targets narrows to the missed targets
+  const narrowedTargets = new Map<string, string[]>();
+
   // Pre-compute cache lookups for all nodes
   const lookupPromises = new Map<string, ReturnType<typeof stepCache.lookup>>();
   for (const node of plan.nodes.values()) {
+    const slices = stepCache.splitBatch(node);
+    if (slices) {
+      const outcome = await lookupBatchSlices(stepCache, node, slices);
+      cacheHits += outcome.hits.length;
+      cacheMisses += outcome.run.length;
+      bypasses += outcome.bypassed.length;
+      verifications += outcome.run.filter((r) => r.verifying).length;
+      for (const { target, reason } of outcome.bypassed) {
+        ctx.io.stdout.write(formatBypassMessage(`${node.id}#${target}`, reason) + "\n");
+      }
+      for (const r of outcome.run) {
+        if (r.verifying) ctx.io.stdout.write(formatVerifyMessage(r.slice.node.id, r.stepKey) + "\n");
+      }
+      if (outcome.hits.length > 0) {
+        ctx.io.stdout.write(
+          `[cache] ✓ ${node.id}: ${outcome.hits.length}/${slices.length} targets skipped (${outcome.hits.join(", ")})\n`,
+        );
+      }
+      if (outcome.runTargets.length === 0) {
+        skipNodes.add(node.id);
+        skippedResults.set(node.id, { id: node.id, status: "success", durationMs: 0 });
+        ctx.onEvent?.({ type: "node-skip", nodeId: node.id, reason: "cache hit" });
+      } else {
+        if (outcome.hits.length > 0) narrowedTargets.set(node.id, outcome.runTargets);
+        batchSlices.set(node.id, outcome.run);
+      }
+      continue;
+    }
     lookupPromises.set(node.id, stepCache.lookup(node));
   }
 
@@ -190,10 +293,13 @@ export async function executePlanWithCache(
     }
   }
 
-  // Build a modified plan that excludes cached nodes
-  const modifiedPlan = skipNodes.size > 0
+  // Build a modified plan that excludes cached nodes and narrows partially-hit batches
+  let modifiedPlan = skipNodes.size > 0
     ? filterPlanNodes(plan, (node) => !skipNodes.has(node.id))
     : plan;
+  if (narrowedTargets.size > 0) {
+    modifiedPlan = narrowBatchTargets(modifiedPlan, narrowedTargets);
+  }
 
   // Track timing for cache recording
   const originalOnEvent = ctx.onEvent;
@@ -205,6 +311,35 @@ export async function executePlanWithCache(
     if (event.type === "node-success" || event.type === "node-failure") {
       const node = plan.nodes.get(event.nodeId);
       if (!node) return;
+
+      // Per-target batch: record each sliced target under its own key
+      const slices = batchSlices.get(event.nodeId);
+      if (slices) {
+        const passed = event.type === "node-success";
+        for (const run of slices) {
+          if (!passed && run.verifying) {
+            // The batch failed and we cannot tell which target; drop every cached pass
+            // that was being verified so a false hit cannot survive.
+            falseHits++;
+            ctx.io.stderr.write(
+              `[cache] ⚠ FALSE HIT SUSPECTED: ${run.slice.node.id} failed verification in batch, invalidating cached entry\n`,
+            );
+            pendingWrites.push(
+              stepCache.invalidate(run.stepKey.key).catch((err) => {
+                console.warn(`[cache] Failed to invalidate ${run.slice.node.id}:`, err);
+              }),
+            );
+          }
+          // Only a passing batch proves each target passed; never record per-target failures
+          if (!passed || !run.recordable) continue;
+          pendingWrites.push(
+            stepCache.record(run.stepKey, true, event.durationMs, run.slice.node).catch((err) => {
+              console.warn(`[cache] Failed to record ${run.slice.node.id}:`, err);
+            }),
+          );
+        }
+        return;
+      }
 
       // Skip recording for bypassed nodes
       if (bypassedNodes.has(event.nodeId)) return;

@@ -25,6 +25,7 @@ export {
   collectRootConfigHashes,
   collectTreeHashes,
   collectTreeHashesForTargets,
+  collectDeclaredInputHashes,
   computePlanKey,
   computeStepKey,
   generateSigningKeypair,
@@ -33,15 +34,22 @@ export {
   getGitTreeHash,
   getNopoVersion,
   getRuntimeVersion,
+  getNodeTargets,
+  getPluginHookCacheSpec,
   getServiceCacheConfig,
+  getTargetCacheOptIn,
   hashFileContent,
   isHandlerCacheable,
   isPathDirty,
   parsePrivateKey,
   parsePublicKey,
+  resolveCacheDeclarations,
   signCacheEntry,
+  splitBatchNode,
   verifyCacheEntrySignature,
+  type BatchTargetSlice,
   type BuildStepKeyResult,
+  type DeclaredInput,
   type CacheableCheck,
   type CacheEligibility,
   type ServiceCacheConfig,
@@ -74,6 +82,8 @@ import {
   checkCacheEligibility,
   computeStepKey,
   getDeclaredEnvInputs,
+  splitBatchNode,
+  type BatchTargetSlice,
   type StepKey,
 } from "./cache-key.ts";
 import {
@@ -340,6 +350,14 @@ export class StepCache {
     if (this.store.delete) {
       await this.store.delete(key);
     }
+  }
+
+  /**
+   * Per-target slices of a batch node whose plugin declares the hook `perTarget`, or null
+   * when the node is keyed as a whole.
+   */
+  splitBatch(node: PlanNode): BatchTargetSlice[] | null {
+    return splitBatchNode(node, this.context.project);
   }
 
   /**

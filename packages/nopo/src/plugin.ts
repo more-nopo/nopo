@@ -196,6 +196,26 @@ export interface NopoPlugin {
    * BatchSpec} and `plan-compact.ts` for the contract.
    */
   batches?: BatchSpec[];
+
+  /** Hooks whose results the step cache may reuse, keyed by hook name. Default: none — an
+   * undeclared hook always runs. Declare a hook only when it is side-effect free (no writes
+   * to the repo or the outside world) and its result depends only on the cache key inputs:
+   * the targets' tree hashes, root configs, lockfiles, plugin source, and declared env and
+   * inputs. A cacheable hook is still only reused when every command it serves opted in
+   * with `cache:` in nopo.yml. See docs/cache.md.
+   */
+  cacheableHooks?: Readonly<Record<string, PluginHookCacheSpec>>;
+}
+
+/** How the step cache may reuse a plugin hook's result. */
+export interface PluginHookCacheSpec {
+  /** Key each entry of a batch payload's `targets` separately. On a partial hit, the hook
+   * runs with only the missed targets in `payload.targets`. Set this only when the hook
+   * handles any subset of targets and one target's result does not depend on which other
+   * targets share the batch. Without it the whole batch shares one key, so a change to any
+   * target re-runs all of them.
+   */
+  perTarget?: boolean;
 }
 
 /**
