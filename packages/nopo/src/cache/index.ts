@@ -27,6 +27,7 @@ export {
   collectTreeHashesForTargets,
   computePlanKey,
   computeStepKey,
+  generateSigningKeypair,
   getDeclaredEnvInputs,
   getDirtyPaths,
   getGitTreeHash,
@@ -36,6 +37,8 @@ export {
   hashFileContent,
   isHandlerCacheable,
   isPathDirty,
+  parsePrivateKey,
+  parsePublicKey,
   signCacheEntry,
   verifyCacheEntrySignature,
   type BuildStepKeyResult,
@@ -90,8 +93,9 @@ export interface CacheConfig {
   enabled: boolean;
   /**
    * Whether cache writes are enabled.
-   * Default: true only in CI (when CI=true), false for local/agent runs.
-   * Override with NOPO_CACHE_WRITE=1 to enable writes locally.
+   * Default: false. Must be explicitly enabled with NOPO_CACHE_WRITE=1/true.
+   * Recommendation: Only enable writes on trusted events (push:main, merge_group).
+   * PR jobs should be read-only to prevent cache poisoning.
    */
   writeEnabled: boolean;
   /** Store configuration */
@@ -103,10 +107,21 @@ export interface CacheConfig {
   /** URL of the current CI run (for cache metadata) */
   runUrl?: string;
   /**
-   * HMAC signing key for cache entry integrity.
-   * When set, entries are signed on write and verified on read.
-   * Unsigned/invalid entries are rejected when a key is configured.
-   * Set via NOPO_CACHE_SIGNING_KEY environment variable.
+   * Ed25519 private key for signing cache entries (PEM or base64 PKCS8).
+   * Writers sign entries with this key. Set via NOPO_CACHE_SIGNING_PRIVATE_KEY.
+   * Writing with writeEnabled but no private key (when public key is configured)
+   * will skip the write with a warning.
+   */
+  signingPrivateKey?: string;
+  /**
+   * Ed25519 public key for verifying cache entry signatures (PEM or base64).
+   * Readers verify entries with this key. Set via NOPO_CACHE_SIGNING_PUBLIC_KEY.
+   * When configured, unsigned or invalid entries are rejected.
+   */
+  signingPublicKey?: string;
+  /**
+   * @deprecated Use signingPrivateKey and signingPublicKey instead.
+   * Legacy HMAC signing key - will be removed in a future version.
    */
   signingKey?: string;
 }
@@ -288,6 +303,15 @@ export class StepCache {
       return;
     }
 
+    // Determine if signature is required (public key configured means readers expect signatures)
+    const requireSignature = !!this.config.signingPublicKey;
+
+    // Skip write if signature required but no private key
+    if (requireSignature && !this.config.signingPrivateKey) {
+      console.warn("[cache] Skipping cache write: public key configured but no private key for signing");
+      return;
+    }
+
     const entry = createCacheEntry(
       stepKey,
       passed,
@@ -295,8 +319,12 @@ export class StepCache {
       this.config.ttlSeconds,
       this.config.runUrl ?? this.context.runUrl,
       undefined, // meta
-      this.config.signingKey, // Sign if key is configured
+      this.config.signingPrivateKey, // Sign with Ed25519 private key
+      requireSignature,
     );
+
+    // Entry is null if signing failed and was required
+    if (entry === null) return;
 
     await this.store.put(entry);
   }
@@ -304,8 +332,11 @@ export class StepCache {
   /**
    * Delete/invalidate a cache entry.
    * Used when verification fails to remove false-positive entries.
+   * Only works when writes are enabled.
    */
   async invalidate(key: string): Promise<void> {
+    // Only delete if writes are enabled (same policy as record)
+    if (!this.config.writeEnabled) return;
     if (this.store.delete) {
       await this.store.delete(key);
     }
@@ -356,8 +387,8 @@ export class StepCache {
       return false;
     }
 
-    // Verify signature if signing key is configured
-    if (!verifyCacheEntry(entry, this.config.signingKey)) {
+    // Verify signature if public key is configured
+    if (!verifyCacheEntry(entry, this.config.signingPublicKey)) {
       return false;
     }
 
@@ -436,13 +467,18 @@ export class StepCache {
  *
  * Environment variables:
  * - NOPO_CACHE: "1" or "true" to enable caching
- * - NOPO_CACHE_WRITE: "1" or "true" to enable cache writes (default: on in CI only)
+ * - NOPO_CACHE_WRITE: "1" or "true" to enable cache writes (default: off)
  * - NOPO_CACHE_STORE: "filesystem" | "s3" (default: filesystem)
  * - NOPO_CACHE_TTL: TTL in seconds (default: 604800 = 7 days)
  * - NOPO_CACHE_SAMPLING: Verification sampling percentage (default: 0)
- * - NOPO_CACHE_SIGNING_KEY: HMAC signing key for cache entry integrity
+ * - NOPO_CACHE_SIGNING_PRIVATE_KEY: Ed25519 private key for signing cache entries
+ * - NOPO_CACHE_SIGNING_PUBLIC_KEY: Ed25519 public key for verifying cache entries
  * - NOPO_CACHE_RUN_URL: CI run URL for metadata
  * - GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID: Auto-detect GitHub Actions run URL
+ *
+ * Recommended CI setup:
+ * - push:main and merge_group: NOPO_CACHE_WRITE=1 (trusted writers)
+ * - pull_request: NOPO_CACHE_WRITE unset (read-only, prevents cache poisoning)
  */
 export function loadCacheConfig(
   env: Record<string, string | undefined>,
@@ -452,12 +488,11 @@ export function loadCacheConfig(
     override?.enabled ??
     (env.NOPO_CACHE === "1" || env.NOPO_CACHE === "true");
 
-  // Write is enabled by default only in CI, or explicitly via NOPO_CACHE_WRITE=1
-  // This makes laptop/agent runs read-only by default
-  const isCI = env.CI === "true" || env.CI === "1";
+  // Write is disabled by default - must be explicitly enabled via NOPO_CACHE_WRITE=1
+  // This prevents untrusted PR jobs from poisoning the cache
   const writeEnabled =
     override?.writeEnabled ??
-    (env.NOPO_CACHE_WRITE === "1" || env.NOPO_CACHE_WRITE === "true" || isCI);
+    (env.NOPO_CACHE_WRITE === "1" || env.NOPO_CACHE_WRITE === "true");
 
   const storeConfig = override?.store ?? storeConfigFromEnv(env);
 
@@ -470,7 +505,11 @@ export function loadCacheConfig(
     override?.samplingPercent ??
     (env.NOPO_CACHE_SAMPLING ? parseInt(env.NOPO_CACHE_SAMPLING, 10) : 0);
 
-  // HMAC signing key for cache entry integrity
+  // Ed25519 signing keys for cache entry integrity
+  const signingPrivateKey = override?.signingPrivateKey ?? env.NOPO_CACHE_SIGNING_PRIVATE_KEY;
+  const signingPublicKey = override?.signingPublicKey ?? env.NOPO_CACHE_SIGNING_PUBLIC_KEY;
+
+  // Legacy HMAC signing key (deprecated)
   const signingKey = override?.signingKey ?? env.NOPO_CACHE_SIGNING_KEY;
 
   // Auto-detect CI run URL
@@ -486,7 +525,9 @@ export function loadCacheConfig(
     store: storeConfig,
     ttlSeconds,
     samplingPercent,
-    signingKey,
+    signingPrivateKey,
+    signingPublicKey,
+    signingKey, // deprecated, for backward compatibility
     runUrl,
   };
 }

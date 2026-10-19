@@ -62,7 +62,7 @@ describe("cache-key", () => {
 
       const key = computeStepKey(inputs);
 
-      expect(key.version).toBe("v3");
+      expect(key.version).toBe("v4");
       expect(key.inputs).toBe(inputs);
     });
 

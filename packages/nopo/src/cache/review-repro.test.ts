@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { StepCache, loadCacheConfig } from "./index.ts";
+import { StepCache, loadCacheConfig, generateSigningKeypair } from "./index.ts";
 import { executePlanWithCache } from "./plan-cache.ts";
 import { planFromNodes, type PlanNode } from "../plan.ts";
 
@@ -28,7 +28,7 @@ function cfg(extra: Record<string, unknown> = {}) {
 }
 const cmdNode = (target: string): PlanNode => ({
   id: `cmd:0:${target}:test`, handler: { kind: "builtin", name: "command:exec" }, needs: [], target,
-  payload: { commandName: "test", stageIndex: 0, task: { service: target, command: "test", executable: "vitest run" } },
+  payload: { commandName: "test", stageIndex: 0, task: { service: target, command: "test", executable: "vitest run", cache: true } },
 });
 async function warm(p: never, node: PlanNode) {
   const c = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;
@@ -173,40 +173,57 @@ describe("PR#37 additional fixes", () => {
     expect(result.bypassReason).toContain("container context");
   });
 
-  it("HMAC signing: unsigned entries rejected when signing key is configured", async () => {
+  it("Ed25519 signing: unsigned entries rejected when public key is configured", async () => {
     const p = project({ api: svc(`${repo}/packages/api`) });
     const node = cmdNode("api");
-    // Warm cache WITHOUT signing key
+    const { publicKey } = generateSigningKeypair();
+    // Warm cache WITHOUT private key (no signature)
     await warm(p, node);
-    // Try to read WITH signing key - should reject
-    const c = (await StepCache.create(cfg({ signingKey: "test-secret" }), { project: p, repoRoot: repo, env: {} }))!;
+    // Try to read WITH public key - should reject unsigned entry
+    const c = (await StepCache.create(cfg({ signingPublicKey: publicKey }), { project: p, repoRoot: repo, env: {} }))!;
     const result = await c.lookup(node);
     expect(result.hit).toBe(false);
   });
 
-  it("HMAC signing: signed entries accepted when signing key matches", async () => {
+  it("Ed25519 signing: signed entries accepted when keypair matches", async () => {
     const p = project({ api: svc(`${repo}/packages/api`) });
     const node = cmdNode("api");
-    const signingKey = "my-secret-key";
-    // Warm cache WITH signing key
-    const c1 = (await StepCache.create(cfg({ signingKey }), { project: p, repoRoot: repo, env: {} }))!;
+    const { privateKey, publicKey } = generateSigningKeypair();
+    // Warm cache WITH private key (entry will be signed)
+    const c1 = (await StepCache.create(cfg({ signingPrivateKey: privateKey, signingPublicKey: publicKey }), { project: p, repoRoot: repo, env: {} }))!;
     const k = (await c1.lookup(node)).stepKey;
     await c1.record(k, true, 10, node);
-    // Read with same signing key - should accept
-    const c2 = (await StepCache.create(cfg({ signingKey }), { project: p, repoRoot: repo, env: {} }))!;
+    // Read with same public key - should accept
+    const c2 = (await StepCache.create(cfg({ signingPublicKey: publicKey }), { project: p, repoRoot: repo, env: {} }))!;
     const result = await c2.lookup(node);
     expect(result.hit).toBe(true);
   });
 
-  it("HMAC signing: signed entries rejected with wrong signing key", async () => {
+  it("Ed25519 signing: signed entries rejected with wrong public key", async () => {
     const p = project({ api: svc(`${repo}/packages/api`) });
     const node = cmdNode("api");
-    // Warm cache WITH signing key
-    const c1 = (await StepCache.create(cfg({ signingKey: "key-1" }), { project: p, repoRoot: repo, env: {} }))!;
+    const keyPair1 = generateSigningKeypair();
+    const keyPair2 = generateSigningKeypair();
+    // Warm cache WITH keypair1
+    const c1 = (await StepCache.create(cfg({ signingPrivateKey: keyPair1.privateKey, signingPublicKey: keyPair1.publicKey }), { project: p, repoRoot: repo, env: {} }))!;
     const k = (await c1.lookup(node)).stepKey;
     await c1.record(k, true, 10, node);
-    // Read with different signing key - should reject
-    const c2 = (await StepCache.create(cfg({ signingKey: "key-2" }), { project: p, repoRoot: repo, env: {} }))!;
+    // Read with keypair2's public key - should reject (wrong key)
+    const c2 = (await StepCache.create(cfg({ signingPublicKey: keyPair2.publicKey }), { project: p, repoRoot: repo, env: {} }))!;
+    const result = await c2.lookup(node);
+    expect(result.hit).toBe(false);
+  });
+
+  it("Ed25519 signing: write skipped when public key configured but no private key", async () => {
+    const p = project({ api: svc(`${repo}/packages/api`) });
+    const node = cmdNode("api");
+    const { publicKey } = generateSigningKeypair();
+    // Try to warm with public key but no private key - should skip write
+    const c1 = (await StepCache.create(cfg({ signingPublicKey: publicKey }), { project: p, repoRoot: repo, env: {} }))!;
+    const k = (await c1.lookup(node)).stepKey;
+    await c1.record(k, true, 10, node);
+    // Should not have written the entry
+    const c2 = (await StepCache.create(cfg({}), { project: p, repoRoot: repo, env: {} }))!;
     const result = await c2.lookup(node);
     expect(result.hit).toBe(false);
   });

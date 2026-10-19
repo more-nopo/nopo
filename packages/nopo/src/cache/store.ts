@@ -23,7 +23,7 @@
  * lives inside implementations.
  */
 
-import { signCacheEntry, verifyCacheEntrySignature, type StepKey } from "./cache-key.ts";
+import { parsePublicKey, signCacheEntry, verifyCacheEntrySignature, type StepKey } from "./cache-key.ts";
 
 /** Cached result metadata */
 export interface CacheEntry {
@@ -39,7 +39,11 @@ export interface CacheEntry {
   createdAt: string;
   /** When this entry expires (ISO timestamp) */
   expiresAt: string;
-  /** HMAC signature for tamper detection (when NOPO_CACHE_SIGNING_KEY is set) */
+  /**
+   * Ed25519 signature for tamper detection (base64-encoded).
+   * Present when NOPO_CACHE_SIGNING_PRIVATE_KEY is configured.
+   * Verified against NOPO_CACHE_SIGNING_PUBLIC_KEY on read.
+   */
   signature?: string;
   /** Optional metadata for debugging */
   meta?: Record<string, unknown>;
@@ -191,9 +195,26 @@ export function storeConfigFromEnv(env: Record<string, string | undefined>): Sto
   return config;
 }
 
+/** Result of attempting to create a cache entry */
+export interface CreateCacheEntryResult {
+  /** The cache entry, or null if signing failed */
+  entry: CacheEntry | null;
+  /** If entry is null, the reason signing failed */
+  error?: string;
+}
+
 /**
  * Create cache entry from step result.
- * If signingKey is provided, the entry is signed.
+ * If signingPrivateKey is provided, the entry is signed with Ed25519.
+ *
+ * @param stepKey - The step key
+ * @param passed - Whether the step passed
+ * @param durationMs - Duration in milliseconds
+ * @param ttlSeconds - TTL for the entry
+ * @param runUrl - CI run URL for metadata
+ * @param meta - Optional metadata
+ * @param signingPrivateKey - Ed25519 private key for signing (PEM or base64 PKCS8)
+ * @param requireSignature - If true and signing fails, returns null entry
  */
 export function createCacheEntry(
   stepKey: StepKey,
@@ -202,8 +223,9 @@ export function createCacheEntry(
   ttlSeconds: number,
   runUrl?: string,
   meta?: Record<string, unknown>,
-  signingKey?: string,
-): CacheEntry {
+  signingPrivateKey?: string,
+  requireSignature = false,
+): CacheEntry | null {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
@@ -217,41 +239,54 @@ export function createCacheEntry(
     meta,
   };
 
-  // Sign the entry if a signing key is provided
-  if (signingKey) {
+  // Sign the entry if a private key is provided
+  if (signingPrivateKey) {
     // Create content to sign (everything except signature)
     const contentToSign = JSON.stringify(entry);
-    entry.signature = signCacheEntry(contentToSign, signingKey);
+    const signature = signCacheEntry(contentToSign, signingPrivateKey);
+    if (signature === null) {
+      // Signing failed
+      if (requireSignature) {
+        console.warn("[cache] Skipping cache write: failed to sign entry");
+        return null;
+      }
+      // Continue without signature if not required
+    } else {
+      entry.signature = signature;
+    }
   }
 
   return entry;
 }
 
 /**
- * Verify a cache entry's signature.
+ * Verify a cache entry's Ed25519 signature.
  * Returns true if:
- * - No signing key is configured (signature not required)
- * - Entry has valid signature matching the signing key
+ * - No public key is configured (signature not required)
+ * - Entry has valid signature matching the public key
  *
  * Returns false if:
- * - Signing key is configured but entry has no signature
- * - Signing key is configured and signature is invalid
+ * - Public key is configured but entry has no signature
+ * - Public key is configured and signature is invalid
+ *
+ * @param entry - The cache entry to verify
+ * @param signingPublicKey - Ed25519 public key (PEM or base64 SPKI)
  */
-export function verifyCacheEntry(entry: CacheEntry, signingKey?: string): boolean {
-  if (!signingKey) {
-    // No signing key configured - accept all entries
+export function verifyCacheEntry(entry: CacheEntry, signingPublicKey?: string): boolean {
+  if (!signingPublicKey) {
+    // No public key configured - accept all entries
     return true;
   }
 
   if (!entry.signature) {
-    // Signing key configured but entry is unsigned - reject
+    // Public key configured but entry is unsigned - reject
     return false;
   }
 
   // Verify signature (reconstruct content without signature field)
   const { signature, ...contentFields } = entry;
   const contentToSign = JSON.stringify(contentFields);
-  return verifyCacheEntrySignature(contentToSign, signature, signingKey);
+  return verifyCacheEntrySignature(contentToSign, signature, signingPublicKey);
 }
 
 /**

@@ -83,16 +83,17 @@ describe("store", () => {
 
       const entry = createCacheEntry(stepKey, true, 1234, 3600, "https://ci.example.com/123");
 
-      expect(entry.key).toBe("abc123");
-      expect(entry.passed).toBe(true);
-      expect(entry.durationMs).toBe(1234);
-      expect(entry.runUrl).toBe("https://ci.example.com/123");
-      expect(entry.createdAt).toBeDefined();
-      expect(entry.expiresAt).toBeDefined();
+      expect(entry).not.toBeNull();
+      expect(entry!.key).toBe("abc123");
+      expect(entry!.passed).toBe(true);
+      expect(entry!.durationMs).toBe(1234);
+      expect(entry!.runUrl).toBe("https://ci.example.com/123");
+      expect(entry!.createdAt).toBeDefined();
+      expect(entry!.expiresAt).toBeDefined();
 
       // Check that expiresAt is TTL seconds after createdAt
-      const created = new Date(entry.createdAt).getTime();
-      const expires = new Date(entry.expiresAt).getTime();
+      const created = new Date(entry!.createdAt).getTime();
+      const expires = new Date(entry!.expiresAt).getTime();
       expect(expires - created).toBe(3600 * 1000);
     });
   });

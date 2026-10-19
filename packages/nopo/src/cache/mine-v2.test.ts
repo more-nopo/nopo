@@ -20,7 +20,7 @@ const cfg = (extra: Record<string, unknown> = {}) => loadCacheConfig({}, {
   enabled: true, writeEnabled: true, samplingPercent: 0, store: { type: "filesystem", filesystem: { baseDir: cacheDir } }, ...extra });
 const cmdNode = (target: string, task: Record<string, unknown> = {}): PlanNode => ({
   id: `cmd:0:${target}:x`, handler: { kind: "builtin", name: "command:exec" }, needs: [], target,
-  payload: { commandName: "x", stageIndex: 0, task: { service: target, command: "x", executable: "vitest run", ...task } } });
+  payload: { commandName: "x", stageIndex: 0, task: { service: target, command: "x", executable: "vitest run", cache: true, ...task } } });
 const mk = (p: never, extra = {}) => StepCache.create(cfg(extra), { project: p, repoRoot: repo, env: {} }).then((c) => c!);
 function writeEntry(key: string, e: Record<string, unknown>) {
   fs.mkdirSync(path.join(cacheDir, key.slice(0, 2)), { recursive: true });
@@ -45,10 +45,12 @@ describe("PR#37 second pass", () => {
     expect(r.inputs).toBeNull();
   });
 
-  it("N2 side-effect command:exec (`clean: rm -rf node_modules build`) must not be cacheable", () => {
+  it("N2 command without cache: true is not cacheable (default is never cache)", () => {
     const p = project({ api: svc(`${repo}/packages/api`) });
-    const r = buildStepKeyInputs(cmdNode("api", { command: "clean", executable: "rm -rf node_modules build" }), p, repo, [], {});
+    // Override cache to undefined to test default behavior (no cache opt-in)
+    const r = buildStepKeyInputs(cmdNode("api", { cache: undefined }), p, repo, [], {});
     expect(r.inputs).toBeNull();
+    expect(r.reason).toBe("command has no cache: true declaration");
   });
 
   it("N3 editing the plugin source must change a plugin-hook key (plugin hashes are dead: no sourcePath ever set)", () => {

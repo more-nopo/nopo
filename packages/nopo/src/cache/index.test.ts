@@ -26,28 +26,36 @@ describe("loadCacheConfig", () => {
   });
 
   describe("writeEnabled", () => {
-    it("defaults to false when not in CI", () => {
+    it("defaults to false", () => {
       const config = loadCacheConfig({});
       expect(config.writeEnabled).toBe(false);
     });
 
-    it("defaults to true in CI (CI=true)", () => {
+    it("defaults to false even in CI (CI=true)", () => {
+      // CI alone no longer enables writes - must explicitly set NOPO_CACHE_WRITE=1
       const config = loadCacheConfig({ CI: "true" });
-      expect(config.writeEnabled).toBe(true);
+      expect(config.writeEnabled).toBe(false);
     });
 
-    it("defaults to true in CI (CI=1)", () => {
+    it("defaults to false even in CI (CI=1)", () => {
+      // CI alone no longer enables writes - must explicitly set NOPO_CACHE_WRITE=1
       const config = loadCacheConfig({ CI: "1" });
-      expect(config.writeEnabled).toBe(true);
+      expect(config.writeEnabled).toBe(false);
     });
 
-    it("enables with NOPO_CACHE_WRITE=1 even outside CI", () => {
+    it("enables with NOPO_CACHE_WRITE=1", () => {
       const config = loadCacheConfig({ NOPO_CACHE_WRITE: "1" });
       expect(config.writeEnabled).toBe(true);
     });
 
-    it("enables with NOPO_CACHE_WRITE=true even outside CI", () => {
+    it("enables with NOPO_CACHE_WRITE=true", () => {
       const config = loadCacheConfig({ NOPO_CACHE_WRITE: "true" });
+      expect(config.writeEnabled).toBe(true);
+    });
+
+    it("enables with NOPO_CACHE_WRITE=1 in CI", () => {
+      // Recommended: only enable writes on trusted events (push:main, merge_group)
+      const config = loadCacheConfig({ CI: "true", NOPO_CACHE_WRITE: "1" });
       expect(config.writeEnabled).toBe(true);
     });
 
@@ -56,8 +64,8 @@ describe("loadCacheConfig", () => {
       expect(config.writeEnabled).toBe(true);
     });
 
-    it("override.writeEnabled takes precedence over CI", () => {
-      const config = loadCacheConfig({ CI: "true" }, { writeEnabled: false });
+    it("override.writeEnabled takes precedence over NOPO_CACHE_WRITE", () => {
+      const config = loadCacheConfig({ NOPO_CACHE_WRITE: "1" }, { writeEnabled: false });
       expect(config.writeEnabled).toBe(false);
     });
   });

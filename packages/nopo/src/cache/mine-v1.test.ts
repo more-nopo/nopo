@@ -28,7 +28,7 @@ function cfg(extra: Record<string, unknown> = {}) {
 }
 const cmdNode = (target: string): PlanNode => ({
   id: `cmd:0:${target}:test`, handler: { kind: "builtin", name: "command:exec" }, needs: [], target,
-  payload: { commandName: "test", stageIndex: 0, task: { service: target, command: "test", executable: "vitest run" } },
+  payload: { commandName: "test", stageIndex: 0, task: { service: target, command: "test", executable: "vitest run", cache: true } },
 });
 async function warm(p: never, node: PlanNode) {
   const c = (await StepCache.create(cfg(), { project: p, repoRoot: repo, env: {} }))!;

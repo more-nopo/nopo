@@ -28,12 +28,21 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  sign,
+  verify,
+  timingSafeEqual,
+  generateKeyPairSync,
+  type KeyObject,
+} from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { glob } from "glob";
 
-import type { NormalizedProjectConfig, NormalizedService } from "../config/index.ts";
+import type { CommandCacheConfig, NormalizedProjectConfig, NormalizedService } from "../config/index.ts";
 import type { LoadedPlugin, PluginReference } from "../plugin.ts";
 import type { PlanNode } from "../plan.ts";
 
@@ -59,31 +68,14 @@ const LOCKFILE_NAMES = [
   "pnpm-lock.yaml",
 ] as const;
 
-// Builtins and plugin hooks that are ALLOWED to be cached (side-effect-free)
-// Everything else is NOT cacheable by default
-const CACHEABLE_HANDLERS: ReadonlySet<string> = new Set([
-  // Side-effect-free command execution (lint, test, typecheck)
-  // Note: command:exec is only cacheable for specific command types
+// Builtins that CAN be cached when explicitly opted-in via cache: true
+// These are the handler types that support caching when the command declares it
+const CACHEABLE_BUILTIN_HANDLERS: ReadonlySet<string> = new Set([
   "builtin:command:exec",
 ]);
 
-// Command names that are NEVER cacheable (have side effects)
-const UNCACHEABLE_COMMANDS: ReadonlySet<string> = new Set([
-  "clean",
-  "build",
-  "compile",
-  "install",
-  "start",
-  "up",
-  "down",
-  "deploy",
-  "publish",
-  "generate",
-  "codegen",
-  "migrate",
-]);
-
-// Flags in executable that indicate write mode (never cache)
+// Flags in executable that indicate write mode (never cache, even with cache: true)
+// This is an extra guard against caching commands that modify files
 const WRITE_MODE_FLAGS = [
   "-u",              // vitest update snapshots
   "--update",        // vitest update snapshots
@@ -91,12 +83,14 @@ const WRITE_MODE_FLAGS = [
   "-w",              // prettier/eslint write
   "--write",         // prettier write
   "--fix",           // eslint fix
-  "--fix-dry-run",   // eslint (ok to cache)
-  "--cache",         // eslint cache (side effect)
+  "--fix-dry-run",   // eslint (ok to cache - dry run doesn't write)
+  "--cache",         // eslint cache (side effect: writes .eslintcache)
 ];
 
-// Plugin hooks that are cacheable (typically lint/test operations)
-// NOTE: Plugin hooks should be opt-in per plugin, but for now use this allowlist
+// Plugin hooks that are cacheable when explicitly declared by the plugin
+// NOTE: This is a temporary allowlist. In the future, plugins should declare
+// cacheable: true per hook in their definition. For now, these are the hooks
+// that are known to be side-effect-free.
 const CACHEABLE_PLUGIN_HOOKS: ReadonlySet<string> = new Set([
   "lint",
   "lintBatch",
@@ -154,9 +148,18 @@ export interface CacheableCheck {
 
 /**
  * Check if a plan node's handler is cacheable.
- * Only side-effect-free checks (lint, test, typecheck) are cacheable.
- * Side-effectful operations (install, build, up/down, etc.) are never cached.
- * Container-context steps (--context container) are never cached.
+ *
+ * Caching is OPT-IN: A command is only cacheable if it explicitly declares
+ * `cache: true` or `cache: { ... }` in its nopo.yml definition.
+ * Commands without the cache field are never cached.
+ *
+ * Additional guards (even with cache: true):
+ * - Container-context steps (--context container) are never cached
+ * - Write-mode flags (--fix, -u, --write, etc.) prevent caching
+ *
+ * Plugin hooks are cacheable only if:
+ * 1. The hook is in the CACHEABLE_PLUGIN_HOOKS allowlist (temporary)
+ * 2. In the future: the plugin declares cacheable: true per hook
  */
 export function isHandlerCacheable(node: PlanNode): CacheableCheck {
   // Check for container context - never cache container steps
@@ -164,9 +167,15 @@ export function isHandlerCacheable(node: PlanNode): CacheableCheck {
   // Check both --context override and task.context from nopo.yml
   const payload = node.payload as {
     contextOverride?: string;
-    task?: { context?: string; command?: string; executable?: string };
+    task?: {
+      context?: string;
+      command?: string;
+      executable?: string;
+      cache?: CommandCacheConfig;
+    };
     commandName?: string;
   } | undefined;
+
   if (payload?.contextOverride === "container" || payload?.task?.context === "container") {
     return {
       cacheable: false,
@@ -176,50 +185,59 @@ export function isHandlerCacheable(node: PlanNode): CacheableCheck {
 
   if (node.handler.kind === "builtin") {
     const handlerKey = `builtin:${node.handler.name}`;
-    if (CACHEABLE_HANDLERS.has(handlerKey)) {
-      // For command:exec, check if the specific command is cacheable
-      if (node.handler.name === "command:exec") {
-        // task.command is the actual command name from nopo.yml
-        const commandName = payload?.task?.command ?? payload?.commandName ?? "";
-        const executable = payload?.task?.executable ?? "";
 
-        // Check for uncacheable command names
-        if (UNCACHEABLE_COMMANDS.has(commandName.toLowerCase())) {
+    // Only certain builtin handlers can be cached at all
+    if (!CACHEABLE_BUILTIN_HANDLERS.has(handlerKey)) {
+      return {
+        cacheable: false,
+        reason: `builtin ${node.handler.name} is not cacheable`,
+      };
+    }
+
+    // For command:exec, require explicit cache opt-in
+    if (node.handler.name === "command:exec") {
+      const taskCache = payload?.task?.cache;
+
+      // OPT-IN: cache must be explicitly set to true or a config object
+      if (taskCache === undefined || taskCache === null) {
+        return {
+          cacheable: false,
+          reason: "command has no cache: true declaration",
+        };
+      }
+
+      const executable = payload?.task?.executable ?? "";
+
+      // Extra guard: check for write-mode flags in executable
+      // Even with cache: true, these flags indicate the command modifies files
+      for (const flag of WRITE_MODE_FLAGS) {
+        // Skip --fix-dry-run which is safe (dry run doesn't write)
+        if (flag === "--fix-dry-run") continue;
+        // Match flag as word boundary (not part of another flag)
+        const flagPattern = new RegExp(`(^|\\s)${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
+        if (flagPattern.test(executable)) {
           return {
             cacheable: false,
-            reason: `command '${commandName}' has side effects`,
+            reason: `executable contains write-mode flag '${flag}'`,
           };
         }
-
-        // Check for write-mode flags in executable
-        for (const flag of WRITE_MODE_FLAGS) {
-          // Skip --fix-dry-run which is safe
-          if (flag === "--fix-dry-run") continue;
-          // Match flag as word boundary (not part of another flag)
-          const flagPattern = new RegExp(`(^|\\s)${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
-          if (flagPattern.test(executable)) {
-            return {
-              cacheable: false,
-              reason: `executable contains write-mode flag '${flag}'`,
-            };
-          }
-        }
       }
+
       return { cacheable: true };
     }
-    return {
-      cacheable: false,
-      reason: `builtin ${node.handler.name} has side effects`,
-    };
+
+    return { cacheable: true };
   }
 
   if (node.handler.kind === "plugin-hook") {
+    // Plugin hooks: only cacheable if the hook is in the allowlist
+    // TODO: In the future, plugins should declare cacheable: true per hook
     if (CACHEABLE_PLUGIN_HOOKS.has(node.handler.hook)) {
       return { cacheable: true };
     }
     return {
       cacheable: false,
-      reason: `plugin hook ${node.handler.plugin}:${node.handler.hook} may have side effects`,
+      reason: `plugin hook ${node.handler.plugin}:${node.handler.hook} is not cacheable`,
     };
   }
 
@@ -236,8 +254,8 @@ export interface StepKey {
   inputs: StepKeyInputs;
 }
 
-// Bumped to v3: added pluginHashes, cache.env/cache.inputs support
-const KEY_VERSION = "v3";
+// Bumped to v4: opt-in caching (cache: true required), Ed25519 signing
+const KEY_VERSION = "v4";
 
 /**
  * Compute a stable cache key for a plan step.
@@ -1037,41 +1055,133 @@ export function checkCacheEligibility(
 }
 
 /**
- * HMAC signing for cache entries.
+ * Ed25519 asymmetric signing for cache entries.
  *
- * When NOPO_CACHE_SIGNING_KEY is set:
- * - Entries are signed on write
- * - Unsigned or invalid entries are rejected on read
+ * Writers sign entries with NOPO_CACHE_SIGNING_PRIVATE_KEY (Ed25519 private key).
+ * Readers verify entries with NOPO_CACHE_SIGNING_PUBLIC_KEY (Ed25519 public key).
  *
- * This prevents cache poisoning from untrusted writers.
- * Recommendation: Only give write credentials to trusted CI events (push:main, merge_group).
- * PR jobs should be read-only.
+ * When a public key is configured:
+ * - Unsigned entries are rejected
+ * - Entries with invalid signatures are rejected
+ *
+ * When write is enabled but no private key is available (while public key is configured):
+ * - Write is skipped with a warning
+ *
+ * Key format: PEM or base64-encoded PKCS8 (for private) / SPKI (for public).
+ *
+ * Generate a keypair with:
+ *   openssl genpkey -algorithm Ed25519 -out private.pem
+ *   openssl pkey -in private.pem -pubout -out public.pem
+ *
+ * Or use `nopo cache keygen` to generate a keypair.
  */
 
 /**
- * Compute HMAC signature for a cache entry.
- * Signs the JSON content (excluding the signature field itself).
+ * Parse an Ed25519 private key from PEM or base64-encoded PKCS8 format.
  */
-export function signCacheEntry(content: string, signingKey: string): string {
-  return createHmac("sha256", signingKey).update(content).digest("hex");
+export function parsePrivateKey(keyData: string): KeyObject | null {
+  try {
+    // Try PEM format first
+    if (keyData.includes("-----BEGIN")) {
+      return createPrivateKey({
+        key: keyData,
+        format: "pem",
+      });
+    }
+    // Try base64-encoded PKCS8
+    const derBuffer = Buffer.from(keyData, "base64");
+    return createPrivateKey({
+      key: derBuffer,
+      format: "der",
+      type: "pkcs8",
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Verify HMAC signature for a cache entry.
- * Uses crypto.timingSafeEqual to prevent timing attacks.
+ * Parse an Ed25519 public key from PEM or base64-encoded SPKI format.
+ */
+export function parsePublicKey(keyData: string): KeyObject | null {
+  try {
+    // Try PEM format first
+    if (keyData.includes("-----BEGIN")) {
+      return createPublicKey({
+        key: keyData,
+        format: "pem",
+      });
+    }
+    // Try base64-encoded SPKI
+    const derBuffer = Buffer.from(keyData, "base64");
+    return createPublicKey({
+      key: derBuffer,
+      format: "der",
+      type: "spki",
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sign a cache entry with an Ed25519 private key.
+ * Returns the signature as a base64 string.
+ *
+ * @param content - The JSON content to sign (excluding signature field)
+ * @param privateKey - Ed25519 private key (PEM or base64 PKCS8)
+ * @returns Base64-encoded signature, or null if signing fails
+ */
+export function signCacheEntry(content: string, privateKey: string): string | null {
+  const key = parsePrivateKey(privateKey);
+  if (!key) {
+    console.warn("[cache] Failed to parse private key for signing");
+    return null;
+  }
+
+  try {
+    const signature = sign(null, Buffer.from(content), key);
+    return signature.toString("base64");
+  } catch (err) {
+    console.warn("[cache] Failed to sign cache entry:", err);
+    return null;
+  }
+}
+
+/**
+ * Verify an Ed25519 signature for a cache entry.
  * Returns true if signature is valid, false otherwise.
+ *
+ * @param content - The JSON content that was signed
+ * @param signature - Base64-encoded signature
+ * @param publicKey - Ed25519 public key (PEM or base64 SPKI)
  */
 export function verifyCacheEntrySignature(
   content: string,
   signature: string,
-  signingKey: string,
+  publicKey: string,
 ): boolean {
-  const expectedSignature = signCacheEntry(content, signingKey);
-  // Use timing-safe comparison to prevent timing attacks
-  if (signature.length !== expectedSignature.length) return false;
+  const key = parsePublicKey(publicKey);
+  if (!key) {
+    return false;
+  }
+
   try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+    const signatureBuffer = Buffer.from(signature, "base64");
+    return verify(null, Buffer.from(content), key, signatureBuffer);
   } catch {
     return false;
   }
+}
+
+/**
+ * Generate an Ed25519 keypair for cache signing.
+ * Returns the keys in PEM format.
+ */
+export function generateSigningKeypair(): { privateKey: string; publicKey: string } {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  return {
+    privateKey: privateKey.export({ type: "pkcs8", format: "pem" }) as string,
+    publicKey: publicKey.export({ type: "spki", format: "pem" }) as string,
+  };
 }
