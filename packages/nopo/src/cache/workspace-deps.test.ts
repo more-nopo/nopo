@@ -91,3 +91,11 @@ describe("workspace package deps", () => {
     expect(Object.keys(r.inputs!.extraInputHashes!)).toEqual(["packages/api/gen/a.json"]);
   });
 });
+
+describe("selector-independent keys", () => {
+  it("the typed command selector does not change a leaf's key", () => {
+    const withName = (commandName: string): PlanNode => ({ ...node, payload: { ...(node.payload as object), commandName } });
+    const k = (n: PlanNode) => computeStepKey(buildStepKeyInputs(n, project(), repo, [], {}).inputs!).key;
+    expect(k(withName("test"))).toBe(k(withName("test:-integration,-cards")));
+  });
+});

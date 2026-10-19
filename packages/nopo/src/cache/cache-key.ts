@@ -496,8 +496,10 @@ function sanitizePayload(payload: unknown): unknown {
   const sanitized: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
-    // Skip invocation-specific fields
-    if (key === "stageIndex" || key === "targets") continue;
+    // Skip invocation-specific fields. `commandName` is the selector the user typed
+    // (`test`, `test:-integration,-cards`); the resolved `task` already names the leaf,
+    // so two selectors that run the same leaf share its result.
+    if (key === "stageIndex" || key === "targets" || key === "commandName") continue;
     sanitized[key] = sanitizePayload(value);
   }
 
