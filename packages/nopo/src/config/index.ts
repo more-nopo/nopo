@@ -142,6 +142,19 @@ const CommandContextSchema = z.enum(["host", "container"]).optional();
 // Command deps: run these commands on the same target first
 const CommandDepsSchema = z.array(z.string().min(1)).optional();
 
+// Cache configuration schema (used for both commands and services)
+const CacheConfigSchema = z.object({
+  env: z.array(z.string()).optional(),
+  inputs: z.array(z.string()).optional(),
+});
+
+// Command-level cache configuration: true or config object
+// Only commands with cache: true or cache: { ... } are cacheable
+const CommandCacheSchema = z.union([
+  z.literal(true),
+  CacheConfigSchema,
+]).optional();
+
 // Sub-sub-command schema (deepest level - no further nesting)
 const SubSubCommandObjectSchema = z
   .object({
@@ -153,6 +166,7 @@ const SubSubCommandObjectSchema = z
     context: CommandContextSchema,
     deps: CommandDepsSchema,
     dependencies: z.never().optional(), // Explicitly disallow cross-service dependencies
+    cache: CommandCacheSchema, // Opt-in caching: true or { env?, inputs? }
   })
   .refine(
     (data) => {
@@ -179,6 +193,7 @@ const SubSubCommandSchema = z.union([
       dir: undefined,
       context: undefined,
       deps: undefined,
+      cache: undefined,
     })),
   SubSubCommandObjectSchema,
 ]);
@@ -195,6 +210,7 @@ const SubCommandObjectSchema = z
     deps: CommandDepsSchema,
     commands: z.record(z.string().min(1), SubSubCommandSchema).optional(),
     dependencies: z.never().optional(), // Explicitly disallow cross-service dependencies
+    cache: CommandCacheSchema, // Opt-in caching: true or { env?, inputs? }
   })
   .refine(
     (data) => {
@@ -228,6 +244,7 @@ const SubCommandSchema = z.union([
       context: undefined,
       deps: undefined,
       commands: undefined,
+      cache: undefined,
     })),
   SubCommandObjectSchema,
 ]);
@@ -244,6 +261,7 @@ const CommandObjectSchema = z
     deps: CommandDepsSchema,
     dependencies: CommandDependenciesSchema,
     commands: z.record(z.string().min(1), SubCommandSchema).optional(),
+    cache: CommandCacheSchema, // Opt-in caching: true or { env?, inputs? }
   })
   .refine(
     (data) => {
@@ -278,6 +296,7 @@ const CommandSchema = z.union([
       deps: undefined,
       dependencies: undefined,
       commands: undefined,
+      cache: undefined,
     })),
   CommandObjectSchema,
 ]);
@@ -344,6 +363,9 @@ const ServicePackageManagersSchema = z
   .array(ServicePackageManagerItemSchema)
   .optional();
 
+// Service-level cache configuration (same shape as command cache config)
+const ServiceCacheConfigSchema = CacheConfigSchema.optional();
+
 const ServiceFileSchema = z
   .object({
     name: z.string().min(1).optional(),
@@ -379,6 +401,8 @@ const ServiceFileSchema = z
     commands: CommandsSchema,
     // Package managers: string references to project-level or inline overrides
     package_managers: ServicePackageManagersSchema,
+    // Cache configuration for this service
+    cache: ServiceCacheConfigSchema,
   })
   .passthrough();
 
@@ -680,6 +704,12 @@ export function extractDependencyNames(deps: CommandDependencies): string[] {
 // Execution context type
 export type CommandContext = "host" | "container";
 
+/** Cache configuration for a command (opt-in caching) */
+export type CommandCacheConfig = true | {
+  env?: string[];
+  inputs?: string[];
+};
+
 // Sub-command (no cross-service dependencies, but deps allowed)
 export interface NormalizedSubCommand {
   plugin?: string;
@@ -690,6 +720,8 @@ export interface NormalizedSubCommand {
   context?: CommandContext;
   deps?: string[];
   commands?: Record<string, NormalizedSubCommand>;
+  /** Opt-in caching: true or { env?, inputs? }. Only commands with cache set are cacheable. */
+  cache?: CommandCacheConfig;
 }
 
 export interface NormalizedCommand {
@@ -702,6 +734,8 @@ export interface NormalizedCommand {
   deps?: string[];
   dependencies?: CommandDependencies;
   commands?: Record<string, NormalizedSubCommand>;
+  /** Opt-in caching: true or { env?, inputs? }. Only commands with cache set are cacheable. */
+  cache?: CommandCacheConfig;
 }
 
 /**
@@ -799,6 +833,11 @@ export interface NormalizedService {
   pluginData?: Record<string, unknown>;
   /** Resolved package managers for this service (merged with project-level) */
   packageManagers: PackageManagerConfig[];
+  /** Cache configuration for this service (env vars and extra inputs) */
+  cache?: {
+    env?: string[];
+    inputs?: string[];
+  };
 }
 
 /**
@@ -1523,6 +1562,9 @@ function discoverServices(
       | Record<string, unknown>
       | undefined;
 
+    // Extract cache configuration
+    const cacheConfig = parsed.cache;
+
     const normalized: NormalizedService = {
       id: serviceId,
       name: parsed.name ?? serviceId,
@@ -1547,6 +1589,7 @@ function discoverServices(
       },
       pluginData,
       packageManagers,
+      cache: cacheConfig,
     };
 
     if (entries[serviceId]) {
@@ -1956,6 +1999,7 @@ function normalizeSubCommands(
     }
 
     const deps = "deps" in cmd ? cmd.deps : undefined;
+    const cache = "cache" in cmd ? cmd.cache : undefined;
 
     if (cmd.command || cmd.plugin) {
       result[name] = {
@@ -1966,6 +2010,7 @@ function normalizeSubCommands(
         dir: cmd.dir,
         context: cmd.context,
         deps,
+        cache,
       };
     } else if (cmd.commands) {
       // Recursive for sub-sub-commands
@@ -1975,6 +2020,7 @@ function normalizeSubCommands(
         context: cmd.context,
         deps,
         commands: normalizeSubSubCommands(cmd.commands),
+        cache,
       };
     } else if (deps && deps.length > 0) {
       // deps-only command (pure composition, no own executable)
@@ -1983,6 +2029,7 @@ function normalizeSubCommands(
         dir: cmd.dir,
         context: cmd.context,
         deps,
+        cache,
       };
     }
   }
@@ -2006,6 +2053,7 @@ function normalizeSubSubCommands(
       dir: cmd.dir,
       context: cmd.context,
       deps: cmd.deps,
+      cache: cmd.cache,
     };
   }
 
@@ -2052,6 +2100,7 @@ function normalizeCommands(
         context: cmd.context,
         deps: cmd.deps,
         dependencies: cmd.dependencies,
+        cache: cmd.cache,
       };
     } else if (cmd.commands) {
       result[name] = {
@@ -2061,6 +2110,7 @@ function normalizeCommands(
         deps: cmd.deps,
         dependencies: cmd.dependencies,
         commands: normalizeSubCommands(cmd.commands, name),
+        cache: cmd.cache,
       };
     } else if (cmd.deps && cmd.deps.length > 0) {
       result[name] = {
@@ -2069,6 +2119,7 @@ function normalizeCommands(
         context: cmd.context,
         deps: cmd.deps,
         dependencies: cmd.dependencies,
+        cache: cmd.cache,
       };
     }
   }

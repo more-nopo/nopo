@@ -1467,13 +1467,71 @@ export class Runner {
         ? concurrencyArg
         : undefined;
 
-    const result = await executePlan(plan, {
-      io: runnerForScript.io,
-      dispatch: buildDispatch(runnerForScript),
-      failureMode,
-      ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
-      onEvent,
-    });
+    // Cache configuration from CLI flags and environment
+    const cacheEnabled = args.get<boolean>("cache") ?? false;
+    const noCache = args.get<boolean>("no-cache") ?? false;
+    const cacheSamplingArg = args.get<number>("cache-sampling");
+
+    // Determine if we should use caching
+    // Accept NOPO_CACHE=1 or NOPO_CACHE=true for env-based enabling
+    const envCacheEnabled =
+      runnerForScript.io.env.NOPO_CACHE === "1" ||
+      runnerForScript.io.env.NOPO_CACHE === "true";
+    const shouldUseCache = (cacheEnabled || envCacheEnabled) && !noCache;
+
+    let result: import("./plan-runner.ts").PlanRunResult;
+
+    if (shouldUseCache) {
+      // Use cached execution
+      const { executePlanWithCache } = await import("./cache/plan-cache.ts");
+      const { loadCacheConfig } = await import("./cache/index.ts");
+
+      const cacheConfig = loadCacheConfig(runnerForScript.io.env, {
+        enabled: true,
+        // Only override samplingPercent if explicitly set via CLI flag
+        ...(cacheSamplingArg !== undefined ? { samplingPercent: cacheSamplingArg } : {}),
+      });
+
+      result = await executePlanWithCache(plan, {
+        io: runnerForScript.io,
+        dispatch: buildDispatch(runnerForScript),
+        failureMode,
+        ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+        onEvent,
+        cache: cacheConfig,
+        project: runnerForScript.config.project,
+        repoRoot: runnerForScript.config.root,
+      });
+
+      // Log cache stats if there were any hits or bypasses
+      const cachedResult = result as import("./cache/plan-cache.ts").CachedPlanRunResult;
+      if (cachedResult.cacheHits > 0 || cachedResult.bypasses > 0) {
+        const total = cachedResult.cacheHits + cachedResult.cacheMisses;
+        const parts: string[] = [];
+        if (cachedResult.cacheHits > 0) {
+          parts.push(`${cachedResult.cacheHits}/${total} steps skipped via cache`);
+        }
+        if (cachedResult.verifications > 0) {
+          parts.push(`${cachedResult.verifications} verified`);
+        }
+        if (cachedResult.bypasses > 0) {
+          parts.push(`${cachedResult.bypasses} bypassed (dirty)`);
+        }
+        if (!cachedResult.writeEnabled) {
+          parts.push("read-only");
+        }
+        this.logger.log(chalk.cyan(`[cache] ${parts.join(", ")}`));
+      }
+    } else {
+      // Regular execution without caching
+      result = await executePlan(plan, {
+        io: runnerForScript.io,
+        dispatch: buildDispatch(runnerForScript),
+        failureMode,
+        ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+        onEvent,
+      });
+    }
 
     if (!result.ok) {
       // Keep-going mode (`--no-fail-fast`): independent branches all run to completion before we

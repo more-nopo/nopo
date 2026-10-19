@@ -1,0 +1,297 @@
+/**
+ * Pluggable result store interface for the step-level cache.
+ *
+ * Stores persist cache entries with metadata about the original run:
+ * - Whether it passed or failed (only passes are reused)
+ * - Duration
+ * - Run URL (CI link)
+ * - Timestamp
+ *
+ * ## Design: Transport-Agnostic Seam
+ *
+ * This interface is intentionally minimal and transport-agnostic to serve as
+ * the integration point for a future hosted nopo server. Today it backs local
+ * and S3 caches; tomorrow the same interface can route to:
+ *
+ * - **Remote cache service**: Hosted nopo server stores results centrally
+ * - **Distributed workers**: Workers execute plan steps and report back through
+ *   the same get/put protocol, with GitHub status updates
+ *
+ * Keep implementations free of S3-specific types in the public interface.
+ * The store contract is: "given a key, return cached metadata or null;
+ * given an entry, persist it." Everything else (transport, auth, sharding)
+ * lives inside implementations.
+ */
+
+import { parsePublicKey, signCacheEntry, verifyCacheEntrySignature, type StepKey } from "./cache-key.ts";
+
+/** Cached result metadata */
+export interface CacheEntry {
+  /** Cache key that produced this entry */
+  key: string;
+  /** Whether the step passed */
+  passed: boolean;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** URL to the CI run that produced this result */
+  runUrl?: string;
+  /** When this entry was created (ISO timestamp) */
+  createdAt: string;
+  /** When this entry expires (ISO timestamp) */
+  expiresAt: string;
+  /**
+   * Ed25519 signature for tamper detection (base64-encoded).
+   * Present when NOPO_CACHE_SIGNING_PRIVATE_KEY is configured.
+   * Verified against NOPO_CACHE_SIGNING_PUBLIC_KEY on read.
+   */
+  signature?: string;
+  /** Optional metadata for debugging */
+  meta?: Record<string, unknown>;
+}
+
+/** Result store interface - implementations provide get/put */
+export interface ResultStore {
+  /** Store name for logging */
+  readonly name: string;
+
+  /**
+   * Get a cached result by key.
+   * Returns null if not found or expired.
+   * Implementations should timeout (~3s) to avoid blocking the run.
+   */
+  get(key: string): Promise<CacheEntry | null>;
+
+  /**
+   * Store a result. Implementations handle TTL and cleanup.
+   */
+  put(entry: CacheEntry): Promise<void>;
+
+  /**
+   * Delete a cache entry (for invalidation after verification failure).
+   * Optional - not all stores may support deletion.
+   */
+  delete?(key: string): Promise<void>;
+
+  /**
+   * Check if the store is available/configured.
+   * Returns false if credentials are missing or store is unreachable.
+   * Implementations should timeout (~3s) to avoid blocking the run.
+   */
+  isAvailable(): Promise<boolean>;
+
+  /**
+   * Optional cleanup of expired entries.
+   * Not all stores need to implement this (e.g., S3 lifecycle rules).
+   */
+  cleanup?(): Promise<number>;
+}
+
+/** Configuration for creating a result store */
+export interface StoreConfig {
+  /** Store type: "filesystem" | "s3" */
+  type: "filesystem" | "s3";
+
+  /** Time-to-live for cache entries in seconds. Default: 7 days (604800) */
+  ttlSeconds?: number;
+
+  /** Filesystem-specific config */
+  filesystem?: {
+    /** Base directory for cache files. Default: ~/.nopo/cache */
+    baseDir?: string;
+  };
+
+  /** S3-compatible store config (works with Cloudflare R2) */
+  s3?: {
+    /** S3 endpoint URL (required for R2) */
+    endpoint?: string;
+    /** Bucket name */
+    bucket: string;
+    /** Key prefix within bucket */
+    prefix?: string;
+    /** AWS region (default: auto) */
+    region?: string;
+    /** Access key ID (can also use AWS_ACCESS_KEY_ID env) */
+    accessKeyId?: string;
+    /** Secret access key (can also use AWS_SECRET_ACCESS_KEY env) */
+    secretAccessKey?: string;
+  };
+}
+
+/** Default TTL: 7 days */
+export const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Create a result store from configuration.
+ * Loads the appropriate implementation lazily.
+ */
+export async function createResultStore(config: StoreConfig): Promise<ResultStore> {
+  const ttlSeconds = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+
+  switch (config.type) {
+    case "filesystem": {
+      const { FilesystemStore } = await import("./stores/filesystem.ts");
+      return new FilesystemStore({
+        baseDir: config.filesystem?.baseDir,
+        ttlSeconds,
+      });
+    }
+    case "s3": {
+      if (!config.s3?.bucket) {
+        throw new Error("S3 store requires bucket configuration");
+      }
+      const { S3Store } = await import("./stores/s3.ts");
+      return new S3Store({
+        ...config.s3,
+        ttlSeconds,
+      });
+    }
+    default:
+      throw new Error(`Unknown store type: ${config.type}`);
+  }
+}
+
+/**
+ * Create a store config from environment variables.
+ * This is the primary way stores are configured in CI.
+ *
+ * Environment variables:
+ * - NOPO_CACHE_STORE: "filesystem" | "s3" (default: filesystem)
+ * - NOPO_CACHE_TTL: TTL in seconds
+ * - NOPO_CACHE_DIR: Filesystem store base directory
+ * - NOPO_CACHE_S3_ENDPOINT: S3/R2 endpoint URL
+ * - NOPO_CACHE_S3_BUCKET: S3/R2 bucket name
+ * - NOPO_CACHE_S3_PREFIX: Key prefix in bucket
+ * - NOPO_CACHE_S3_REGION: AWS region
+ * - AWS_ACCESS_KEY_ID / NOPO_CACHE_S3_ACCESS_KEY_ID: Access key
+ * - AWS_SECRET_ACCESS_KEY / NOPO_CACHE_S3_SECRET_ACCESS_KEY: Secret key
+ */
+export function storeConfigFromEnv(env: Record<string, string | undefined>): StoreConfig {
+  const type = (env.NOPO_CACHE_STORE ?? "filesystem") as StoreConfig["type"];
+  const ttlSeconds = env.NOPO_CACHE_TTL
+    ? parseInt(env.NOPO_CACHE_TTL, 10)
+    : DEFAULT_TTL_SECONDS;
+
+  const config: StoreConfig = { type, ttlSeconds };
+
+  if (type === "filesystem") {
+    config.filesystem = {
+      baseDir: env.NOPO_CACHE_DIR,
+    };
+  } else if (type === "s3") {
+    const bucket = env.NOPO_CACHE_S3_BUCKET;
+    if (!bucket) {
+      throw new Error("NOPO_CACHE_S3_BUCKET is required for S3 cache store");
+    }
+    config.s3 = {
+      endpoint: env.NOPO_CACHE_S3_ENDPOINT,
+      bucket,
+      prefix: env.NOPO_CACHE_S3_PREFIX,
+      region: env.NOPO_CACHE_S3_REGION,
+      accessKeyId: env.NOPO_CACHE_S3_ACCESS_KEY_ID ?? env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: env.NOPO_CACHE_S3_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY,
+    };
+  }
+
+  return config;
+}
+
+/** Result of attempting to create a cache entry */
+export interface CreateCacheEntryResult {
+  /** The cache entry, or null if signing failed */
+  entry: CacheEntry | null;
+  /** If entry is null, the reason signing failed */
+  error?: string;
+}
+
+/**
+ * Create cache entry from step result.
+ * If signingPrivateKey is provided, the entry is signed with Ed25519.
+ *
+ * @param stepKey - The step key
+ * @param passed - Whether the step passed
+ * @param durationMs - Duration in milliseconds
+ * @param ttlSeconds - TTL for the entry
+ * @param runUrl - CI run URL for metadata
+ * @param meta - Optional metadata
+ * @param signingPrivateKey - Ed25519 private key for signing (PEM or base64 PKCS8)
+ * @param requireSignature - If true and signing fails, returns null entry
+ */
+export function createCacheEntry(
+  stepKey: StepKey,
+  passed: boolean,
+  durationMs: number,
+  ttlSeconds: number,
+  runUrl?: string,
+  meta?: Record<string, unknown>,
+  signingPrivateKey?: string,
+  requireSignature = false,
+): CacheEntry | null {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+
+  const entry: CacheEntry = {
+    key: stepKey.key,
+    passed,
+    durationMs,
+    runUrl,
+    createdAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    meta,
+  };
+
+  // Sign the entry if a private key is provided
+  if (signingPrivateKey) {
+    // Create content to sign (everything except signature)
+    const contentToSign = JSON.stringify(entry);
+    const signature = signCacheEntry(contentToSign, signingPrivateKey);
+    if (signature === null) {
+      // Signing failed
+      if (requireSignature) {
+        console.warn("[cache] Skipping cache write: failed to sign entry");
+        return null;
+      }
+      // Continue without signature if not required
+    } else {
+      entry.signature = signature;
+    }
+  }
+
+  return entry;
+}
+
+/**
+ * Verify a cache entry's Ed25519 signature.
+ * Returns true if:
+ * - No public key is configured (signature not required)
+ * - Entry has valid signature matching the public key
+ *
+ * Returns false if:
+ * - Public key is configured but entry has no signature
+ * - Public key is configured and signature is invalid
+ *
+ * @param entry - The cache entry to verify
+ * @param signingPublicKey - Ed25519 public key (PEM or base64 SPKI)
+ */
+export function verifyCacheEntry(entry: CacheEntry, signingPublicKey?: string): boolean {
+  if (!signingPublicKey) {
+    // No public key configured - accept all entries
+    return true;
+  }
+
+  if (!entry.signature) {
+    // Public key configured but entry is unsigned - reject
+    return false;
+  }
+
+  // Verify signature (reconstruct content without signature field)
+  const { signature, ...contentFields } = entry;
+  const contentToSign = JSON.stringify(contentFields);
+  return verifyCacheEntrySignature(contentToSign, signature, signingPublicKey);
+}
+
+/**
+ * Check if a cache entry is expired.
+ */
+export function isExpired(entry: CacheEntry): boolean {
+  return new Date(entry.expiresAt) < new Date();
+}
